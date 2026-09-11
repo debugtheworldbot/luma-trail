@@ -2,7 +2,7 @@ import AppKit
 
 enum TrailTheme: Int, CaseIterable {
     // Raw values 4 and 6 are retired; preserve all remaining saved selections.
-    case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8, butterflies = 9, bubbles = 10, clover = 11, snowflakes = 12
+    case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8, butterflies = 9, bubbles = 10, clover = 11, snowflakes = 12, mixed = 13
     var title: String {
         switch self {
         case .stardust: return "仙女星尘"
@@ -16,6 +16,7 @@ enum TrailTheme: Int, CaseIterable {
         case .bubbles: return "透彩气泡"
         case .clover: return "幸运四叶草"
         case .snowflakes: return "初雪轻舞"
+        case .mixed: return "缤纷混合"
         }
     }
     var subtitle: String {
@@ -31,6 +32,7 @@ enum TrailTheme: Int, CaseIterable {
         case .bubbles: return "透明 · 虹彩边缘 · 轻轻上浮"
         case .clover: return "白色心形叶 · 绿色光晕 · 幸运飘落"
         case .snowflakes: return "细小雪晶 · 四散 · 轻盈消散"
+        case .mixed: return "全部图案等概率随机 · 含已导入图片"
         }
     }
     var symbol: String {
@@ -46,9 +48,10 @@ enum TrailTheme: Int, CaseIterable {
         case .bubbles: return "bubbles.and.sparkles"
         case .clover: return "leaf.fill"
         case .snowflakes: return "snowflake"
+        case .mixed: return "shuffle"
         }
     }
-    static var displayOrder: [TrailTheme] { [.stardust, .hearts, .flowers, .puppy, .bunny, .rainbow, .butterflies, .bubbles, .clover, .snowflakes, .custom] }
+    static var displayOrder: [TrailTheme] { [.stardust, .hearts, .flowers, .puppy, .bunny, .rainbow, .butterflies, .bubbles, .clover, .snowflakes, .mixed, .custom] }
     var colors: [NSColor] {
         switch self {
         case .stardust: return [NSColor(hex: 0xF24CB8), NSColor(hex: 0xFF85AC), NSColor(hex: 0xF8AAD9), NSColor(hex: 0xF77791)]
@@ -57,7 +60,7 @@ enum TrailTheme: Int, CaseIterable {
         case .puppy: return [NSColor(hex: 0xB78668), NSColor(hex: 0xC99E7D), NSColor(hex: 0xA78076)]
         case .bunny: return [NSColor(hex: 0xFFF5F4), NSColor(hex: 0xF7DBE7), NSColor(hex: 0xE9DEF9)]
         case .rainbow: return [0xFFA9BC, 0xFFD0AC, 0xFFF0AF, 0xC7E9B6, 0xAFE2EA, 0xBFC6F1, 0xDFB7ED].map { NSColor(hex: $0) }
-        case .custom: return [.white]
+        case .custom, .mixed: return [.white]
         case .butterflies: return [0xA1D98F, 0xE9AED3, 0xC4B3ED].map { NSColor(hex: $0) }
         case .bubbles: return [0xA6D8BE, 0xEFB5D0, 0xACCFEF].map { NSColor(hex: $0) }
         case .clover: return [0x83C86A, 0xA0DA7D, 0x63B67C].map { NSColor(hex: $0) }
@@ -138,7 +141,7 @@ final class ParticleSystem {
     let limit = 240
     func random() -> Double {
         seed = seed &* 6364136223846793005 &+ 1442695040888963407
-        return Double(seed >> 11) / Double(UInt64.max >> 11)
+        return Double(seed >> 11) / 9_007_199_254_740_992.0
     }
     func reset() {
         particles.removeAll(keepingCapacity: true); previous = nil; lastTime = nil
@@ -229,14 +232,17 @@ final class ParticleSystem {
         for _ in 0..<12 { spawn(x: Double(point.x), y: Double(point.y), at: time, settings: settings, burst: true) }
     }
     private func spawn(x: Double, y: Double, at time: Double, settings s: TrailSettings, burst: Bool) {
+        // Resolve once per particle so color, size and motion use the same motif.
+        let choices = TrailTheme.allCases.filter { $0 != .mixed && ($0 != .custom || s.customData != nil) }
+        let theme = s.theme == .mixed ? choices[Int(random() * Double(choices.count))] : s.theme
         let direction = random() * 2 * .pi
-        let speed = burst ? 35 + random() * 65 : ((s.theme == .stardust || s.theme == .snowflakes) ? 30 + random() * 80 : 5 + random() * 22)
+        let speed = burst ? 35 + random() * 65 : ((theme == .stardust || theme == .snowflakes) ? 30 + random() * 80 : 5 + random() * 22)
         particles.append(Particle(x: x + (random() - 0.5) * 8, y: y + (random() - 0.5) * 8,
             vx: cos(direction) * speed, vy: sin(direction) * speed + (burst ? 8 : 6),
             born: time, life: s.lifetime * (0.65 + random() * 0.65),
-            size: s.size * (s.theme == .snowflakes ? 0.38 + random() * 0.37 : [TrailTheme.butterflies, .bubbles, .clover].contains(s.theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
-            spin: (random() - 0.5) * ([TrailTheme.flowers, .clover, .snowflakes].contains(s.theme) ? 2.4 : 0.65),
-            phase: random() * 2 * .pi, color: Int(random() * Double(s.theme.colors.count)), theme: s.theme, alpha: s.opacity))
+            size: s.size * (theme == .snowflakes ? 0.38 + random() * 0.37 : [TrailTheme.butterflies, .bubbles, .clover].contains(theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
+            spin: (random() - 0.5) * ([TrailTheme.flowers, .clover, .snowflakes].contains(theme) ? 2.4 : 0.65),
+            phase: random() * 2 * .pi, color: Int(random() * Double(theme.colors.count)), theme: theme, alpha: s.opacity))
         if particles.count > limit { particles.removeFirst(particles.count - limit) }
     }
     var bounds: CGRect {
@@ -252,7 +258,7 @@ final class ParticlePainter {
     private var textures: [String: CGImage] = [:]
     var custom: CGImage?
     init() {
-        for theme in TrailTheme.allCases where theme != .custom {
+        for theme in TrailTheme.allCases where theme != .custom && theme != .mixed {
             for color in theme.colors.indices { textures["\(theme.rawValue)-\(color)"] = Self.texture(theme: theme, color: theme.colors[color]) }
         }
     }
@@ -347,7 +353,7 @@ final class ParticlePainter {
                 ctx.addArc(center: CGPoint(x: 0, y: -30), radius: CGFloat(57 - index * 7), startAngle: 0, endAngle: .pi, clockwise: false)
                 ctx.strokePath()
             }
-        case .stardust, .custom:
+        case .stardust, .custom, .mixed:
             let path = CGMutablePath()
             path.move(to: CGPoint(x: 0, y: 49))
             path.addCurve(to: CGPoint(x: 49, y: 0), control1: CGPoint(x: 13, y: 13), control2: CGPoint(x: 13, y: 13))
@@ -512,11 +518,42 @@ final class ParticlePainter {
 }
 
 func runParticleTests() {
-    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12], "Remaining saved theme IDs must stay stable")
+    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13], "Remaining saved theme IDs must stay stable")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
     }
     precondition(Set(TrailTheme.displayOrder) == Set(TrailTheme.allCases), "Every theme must be selectable")
+    for includeCustom in [false, true] {
+        let mixedSettings = TrailSettings(persistent: false), mixed = ParticleSystem()
+        mixedSettings.theme = .mixed
+        if includeCustom {
+            mixedSettings.customData = NSBitmapImageRep(cgImage: ParticlePainter.texture(theme: .hearts, color: .white))
+                .representation(using: .png, properties: [:])!
+        }
+        let expected = TrailTheme.allCases.filter { $0 != .mixed && ($0 != .custom || includeCustom) }
+        var counts: [TrailTheme: Int] = [:]
+        for _ in 0..<2_000 {
+            mixed.particles.removeAll(keepingCapacity: true)
+            mixed.burst(at: .zero, time: 0, settings: mixedSettings)
+            for particle in mixed.particles {
+                counts[particle.theme, default: 0] += 1
+                precondition(particle.color >= 0 && particle.color < particle.theme.colors.count, "Mixed colors must match the resolved motif")
+            }
+        }
+        precondition(Set(counts.keys) == Set(expected), "Mix must include all available motifs and exclude unavailable images")
+        let average = 24_000.0 / Double(expected.count)
+        precondition(counts.values.allSatisfy { abs(Double($0) - average) < average * 0.1 }, "Mixed motifs must have approximately equal frequency")
+        mixed.reset()
+        for frame in 0...120 {
+            mixed.tick(at: Double(frame) / 60, cursor: CGPoint(x: frame * 5, y: 100), settings: mixedSettings)
+        }
+        precondition(Set(mixed.particles.map(\.theme)) == Set(expected), "Movement must emit mixed motifs too")
+        precondition(mixed.particles.count <= mixed.limit, "Mixed particles must stay bounded")
+        mixed.tick(at: 10, cursor: nil, settings: mixedSettings)
+        precondition(mixed.particles.isEmpty, "Mixed motifs must expire")
+        precondition(mixedSettings.theme == .mixed, "Emission must preserve the selected mixed setting")
+    }
+    print("PASS: mixed motif coverage, equal frequency, custom image inclusion, movement and expiry")
     for theme in [TrailTheme.butterflies, .bubbles, .clover, .snowflakes] {
         let settings = TrailSettings(persistent: false), system = ParticleSystem()
         settings.theme = theme
