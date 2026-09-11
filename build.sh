@@ -11,6 +11,13 @@ xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
   -target arm64-apple-macosx13.0 -framework AppKit -framework Carbon \
   -import-objc-header Sources/CursorBridge.h "$STAGING/CursorBridge.o" Sources/CursorAppearance.swift Sources/Particles.swift Sources/main.swift -o "$APP/Contents/MacOS/LumaTrail"
 cp Info.plist "$APP/Contents/Info.plist"
+ICONSET="$STAGING/AppIcon.iconset"
+mkdir -p "$ICONSET"
+for size in 16 32 128 256 512; do
+  sips -z "$size" "$size" Assets/AppIcon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  sips -z "$((size * 2))" "$((size * 2))" Assets/AppIcon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 "$APP/Contents/MacOS/LumaTrail" --self-test
