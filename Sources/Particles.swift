@@ -2,7 +2,7 @@ import AppKit
 
 enum TrailTheme: Int, CaseIterable {
     // Raw values 4 and 6 are retired; preserve all remaining saved selections.
-    case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8
+    case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8, butterflies = 9, bubbles = 10, clover = 11, snowflakes = 12
     var title: String {
         switch self {
         case .stardust: return "仙女星尘"
@@ -12,6 +12,10 @@ enum TrailTheme: Int, CaseIterable {
         case .puppy: return "奶咖脚印"
         case .bunny: return "棉花小兔"
         case .rainbow: return "梦幻彩虹"
+        case .butterflies: return "柔光蝴蝶"
+        case .bubbles: return "透彩气泡"
+        case .clover: return "幸运四叶草"
+        case .snowflakes: return "初雪轻舞"
         }
     }
     var subtitle: String {
@@ -23,6 +27,10 @@ enum TrailTheme: Int, CaseIterable {
         case .puppy: return "圆圆脚印 · 奶咖小狗"
         case .bunny: return "长耳朵 · 腮红 · 小兔子"
         case .rainbow: return "柔光 · 七色丝带 · 缓缓消散"
+        case .butterflies: return "薄翼 · 振翅 · 薄荷与粉紫"
+        case .bubbles: return "透明 · 虹彩边缘 · 轻轻上浮"
+        case .clover: return "绿色心形叶 · 柔光 · 幸运飘落"
+        case .snowflakes: return "纯白六角 · 轻旋 · 缓缓飘雪"
         }
     }
     var symbol: String {
@@ -34,9 +42,13 @@ enum TrailTheme: Int, CaseIterable {
         case .puppy: return "pawprint.fill"
         case .bunny: return "hare.fill"
         case .rainbow: return "rainbow"
+        case .butterflies: return "leaf"
+        case .bubbles: return "bubbles.and.sparkles"
+        case .clover: return "leaf.fill"
+        case .snowflakes: return "snowflake"
         }
     }
-    static var displayOrder: [TrailTheme] { [.stardust, .hearts, .flowers, .puppy, .bunny, .rainbow, .custom] }
+    static var displayOrder: [TrailTheme] { [.stardust, .hearts, .flowers, .puppy, .bunny, .rainbow, .butterflies, .bubbles, .clover, .snowflakes, .custom] }
     var colors: [NSColor] {
         switch self {
         case .stardust: return [NSColor(hex: 0xF24CB8), NSColor(hex: 0xFF85AC), NSColor(hex: 0xF8AAD9), NSColor(hex: 0xF77791)]
@@ -46,6 +58,10 @@ enum TrailTheme: Int, CaseIterable {
         case .bunny: return [NSColor(hex: 0xFFF5F4), NSColor(hex: 0xF7DBE7), NSColor(hex: 0xE9DEF9)]
         case .rainbow: return [0xFFA9BC, 0xFFD0AC, 0xFFF0AF, 0xC7E9B6, 0xAFE2EA, 0xBFC6F1, 0xDFB7ED].map { NSColor(hex: $0) }
         case .custom: return [.white]
+        case .butterflies: return [0xA1D98F, 0xE9AED3, 0xC4B3ED].map { NSColor(hex: $0) }
+        case .bubbles: return [0xA6D8BE, 0xEFB5D0, 0xACCFEF].map { NSColor(hex: $0) }
+        case .clover: return [0x83C86A, 0xA0DA7D, 0x63B67C].map { NSColor(hex: $0) }
+        case .snowflakes: return [.white]
         }
     }
 }
@@ -142,8 +158,15 @@ final class ParticleSystem {
                 // Loose glitter expands and eases to a stop, without sagging into a falling tail.
                 particles[i].vx *= exp(-2.1 * dt)
                 particles[i].vy *= exp(-2.1 * dt)
+            } else if [.butterflies, .bubbles, .snowflakes, .clover].contains(particles[i].theme) {
+                let age = time - particles[i].born
+                let theme = particles[i].theme
+                let targetY: Double = theme == .bubbles ? 22 : theme == .butterflies ? 12 : theme == .snowflakes ? -18 : -12
+                particles[i].vy += (targetY - particles[i].vy) * (1 - exp(-2 * dt))
+                particles[i].vx *= exp(-1.6 * dt)
+                particles[i].x += sin(age * (theme == .butterflies ? 7 : 3) + particles[i].phase) * 12 * dt
             } else {
-                particles[i].vy -= (particles[i].theme == .stardust ? 14 : 27) * dt
+                particles[i].vy -= 27 * dt
                 particles[i].vx *= exp(-1.6 * dt)
             }
             particles[i].angle += particles[i].spin * dt
@@ -211,8 +234,8 @@ final class ParticleSystem {
         particles.append(Particle(x: x + (random() - 0.5) * 8, y: y + (random() - 0.5) * 8,
             vx: cos(direction) * speed, vy: sin(direction) * speed + (burst ? 8 : 6),
             born: time, life: s.lifetime * (0.65 + random() * 0.65),
-            size: s.size * (0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
-            spin: (random() - 0.5) * (s.theme == .flowers ? 2.4 : 0.65),
+            size: s.size * ([TrailTheme.butterflies, .bubbles, .clover, .snowflakes].contains(s.theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
+            spin: (random() - 0.5) * ([TrailTheme.flowers, .clover, .snowflakes].contains(s.theme) ? 2.4 : 0.65),
             phase: random() * 2 * .pi, color: Int(random() * Double(s.theme.colors.count)), theme: s.theme, alpha: s.opacity))
         if particles.count > limit { particles.removeFirst(particles.count - limit) }
     }
@@ -243,6 +266,63 @@ final class ParticlePainter {
         ctx.setShadow(offset: .zero, blur: theme == .stardust ? 5 : 3, color: color.withAlphaComponent(0.5).cgColor)
         ctx.setFillColor(color.cgColor)
         switch theme {
+        case .butterflies:
+            ctx.setShadow(offset: .zero, blur: 8, color: color.withAlphaComponent(0.55).cgColor)
+            for side in [-1.0, 1.0] {
+                ctx.saveGState(); ctx.scaleBy(x: side, y: 1)
+                let wing = CGMutablePath()
+                wing.move(to: CGPoint(x: 2, y: 0))
+                wing.addCurve(to: CGPoint(x: 48, y: 43), control1: CGPoint(x: 12, y: 40), control2: CGPoint(x: 48, y: 58))
+                wing.addCurve(to: CGPoint(x: 9, y: -5), control1: CGPoint(x: 56, y: 10), control2: CGPoint(x: 30, y: 0))
+                wing.addCurve(to: CGPoint(x: 33, y: -37), control1: CGPoint(x: 52, y: -6), control2: CGPoint(x: 48, y: -39))
+                wing.addCurve(to: CGPoint(x: 2, y: 0), control1: CGPoint(x: 12, y: -48), control2: CGPoint(x: 5, y: -21))
+                wing.closeSubpath()
+                ctx.addPath(wing); ctx.fillPath()
+                ctx.saveGState(); ctx.addPath(wing); ctx.clip()
+                let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [NSColor.white.withAlphaComponent(0.9).cgColor, color.withAlphaComponent(0).cgColor] as CFArray, locations: [0, 1])!
+                ctx.drawRadialGradient(gradient, startCenter: CGPoint(x: 20, y: 6), startRadius: 0, endCenter: CGPoint(x: 20, y: 6), endRadius: 42, options: [])
+                ctx.restoreGState(); ctx.restoreGState()
+            }
+            ctx.setFillColor(color.blended(withFraction: 0.25, of: .white)!.cgColor)
+            ctx.fillEllipse(in: CGRect(x: -3, y: -18, width: 6, height: 42))
+        case .bubbles:
+            ctx.setShadow(offset: .zero, blur: 5, color: color.withAlphaComponent(0.45).cgColor)
+            ctx.setFillColor(color.withAlphaComponent(0.035).cgColor)
+            ctx.fillEllipse(in: CGRect(x: -44, y: -44, width: 88, height: 88))
+            ctx.setLineWidth(3.5); ctx.setLineCap(.round)
+            let tints = [color, NSColor(hex: 0xF6BFD8), NSColor(hex: 0xBEE9CD), NSColor(hex: 0xBBDDF4)]
+            for i in 0..<4 {
+                ctx.setStrokeColor(tints[i].withAlphaComponent(0.85).cgColor)
+                ctx.addArc(center: .zero, radius: 44, startAngle: Double(i) * .pi / 2, endAngle: Double(i + 1) * .pi / 2, clockwise: false); ctx.strokePath()
+            }
+            ctx.setShadow(offset: .zero, blur: 0)
+            ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.95).cgColor); ctx.setLineWidth(4)
+            ctx.addArc(center: .zero, radius: 36, startAngle: 1.8, endAngle: 2.6, clockwise: false); ctx.strokePath()
+            ctx.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
+            ctx.fillEllipse(in: CGRect(x: 22, y: -28, width: 5, height: 5))
+        case .clover:
+            ctx.setShadow(offset: .zero, blur: 9, color: color.withAlphaComponent(0.6).cgColor)
+            for i in 0..<4 {
+                ctx.saveGState(); ctx.rotate(by: Double(i) * .pi / 2)
+                let leaf = CGMutablePath(); leaf.move(to: .zero)
+                leaf.addCurve(to: CGPoint(x: 0, y: 41), control1: CGPoint(x: -43, y: 23), control2: CGPoint(x: -22, y: 63))
+                leaf.addCurve(to: .zero, control1: CGPoint(x: 22, y: 63), control2: CGPoint(x: 43, y: 23))
+                ctx.addPath(leaf); ctx.fillPath()
+                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.3).cgColor); ctx.setLineWidth(1.5)
+                ctx.move(to: CGPoint(x: 0, y: 8)); ctx.addLine(to: CGPoint(x: 0, y: 32)); ctx.strokePath()
+                ctx.restoreGState()
+            }
+        case .snowflakes:
+            ctx.setShadow(offset: .zero, blur: 5, color: NSColor(hex: 0xA6CDE9).withAlphaComponent(0.8).cgColor)
+            ctx.setStrokeColor(NSColor.white.cgColor); ctx.setLineWidth(4); ctx.setLineCap(.round)
+            for i in 0..<6 {
+                ctx.saveGState(); ctx.rotate(by: Double(i) * .pi / 3)
+                ctx.move(to: .zero); ctx.addLine(to: CGPoint(x: 0, y: 48))
+                for y in [23.0, 36.0] {
+                    ctx.move(to: CGPoint(x: -10, y: y + 8)); ctx.addLine(to: CGPoint(x: 0, y: y)); ctx.addLine(to: CGPoint(x: 10, y: y + 8))
+                }
+                ctx.strokePath(); ctx.restoreGState()
+            }
         case .rainbow:
             ctx.setShadow(offset: .zero, blur: 3, color: NSColor.white.withAlphaComponent(0.3).cgColor)
             for (index, tint) in TrailTheme.rainbow.colors.enumerated() {
@@ -398,12 +478,16 @@ final class ParticlePainter {
             let fade = pow(1 - progress, 0.85) * min(1, (time - p.born) / 0.035)
             // Independent phases make each element shimmer instead of blinking the whole trail at once.
             let wave = (sin((time - p.born) * 2 * .pi * twinkleSpeed + p.phase) + 1) / 2
-            let twinkle = 0.18 + 0.82 * wave
+            let gentle = [TrailTheme.butterflies, .bubbles, .clover, .snowflakes].contains(p.theme)
+            let twinkle = gentle ? 0.85 + 0.15 * wave : 0.18 + 0.82 * wave
             let size = p.size * (1 - progress * 0.55) * (p.theme == .stardust ? 0.72 + 0.28 * wave : 1)
             guard let texture = p.theme == .custom ? custom : textures["\(p.theme.rawValue)-\(p.color)"] else { continue }
             ctx.saveGState()
             ctx.translateBy(x: p.x - Double(origin.x), y: p.y - Double(origin.y))
             ctx.rotate(by: p.angle); ctx.setAlpha(max(0, fade * twinkle * p.alpha))
+            if p.theme == .butterflies {
+                ctx.scaleBy(x: 0.5 + 0.5 * abs(cos((time - p.born) * 9 + p.phase)), y: 1)
+            }
             ctx.draw(texture, in: CGRect(x: -size / 2, y: -size / 2, width: size, height: size))
             ctx.restoreGState()
         }
@@ -411,10 +495,25 @@ final class ParticlePainter {
 }
 
 func runParticleTests() {
-    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8], "Remaining saved theme IDs must stay stable")
+    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12], "Remaining saved theme IDs must stay stable")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
     }
+    precondition(Set(TrailTheme.displayOrder) == Set(TrailTheme.allCases), "Every theme must be selectable")
+    for theme in [TrailTheme.butterflies, .bubbles, .clover, .snowflakes] {
+        let settings = TrailSettings(persistent: false), system = ParticleSystem()
+        settings.theme = theme
+        for frame in 0...60 {
+            system.tick(at: Double(frame) / 60, cursor: CGPoint(x: frame * 4, y: 100), settings: settings)
+        }
+        precondition(!system.particles.isEmpty && system.particles.allSatisfy { $0.theme == theme }, "New themes must emit their selected motif")
+        system.particles = [Particle(x: 0, y: 0, vx: 0, vy: 0, born: 1, life: 2, size: 24, angle: 0, spin: 1, phase: 0, color: 0, theme: theme, alpha: 1)]
+        for frame in 61...90 { system.tick(at: Double(frame) / 60, cursor: nil, settings: settings) }
+        precondition((system.particles[0].y > 0) == (theme == .bubbles || theme == .butterflies), "Floating and falling themes must move in the intended direction")
+        system.tick(at: 10, cursor: nil, settings: settings)
+        precondition(system.particles.isEmpty, "New motifs must fully expire")
+    }
+    print("PASS: new theme selection, emission, floating/falling motion and expiry")
     let s = TrailSettings(persistent: false), model = ParticleSystem()
     model.tick(at: 0, cursor: .zero, settings: s)
     for i in 1...60 { model.tick(at: Double(i) / 60, cursor: CGPoint(x: i * 3, y: 80), settings: s) }
