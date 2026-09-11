@@ -30,7 +30,7 @@ enum TrailTheme: Int, CaseIterable {
         case .butterflies: return "薄翼 · 振翅 · 薄荷与粉紫"
         case .bubbles: return "透明 · 虹彩边缘 · 轻轻上浮"
         case .clover: return "白色心形叶 · 绿色光晕 · 幸运飘落"
-        case .snowflakes: return "纯白六角 · 轻旋 · 缓缓飘雪"
+        case .snowflakes: return "细小雪晶 · 四散 · 轻盈消散"
         }
     }
     var symbol: String {
@@ -154,14 +154,14 @@ final class ParticleSystem {
             if particles[i].trailStart != nil { continue }
             particles[i].x += particles[i].vx * dt
             particles[i].y += particles[i].vy * dt
-            if particles[i].theme == .stardust {
+            if particles[i].theme == .stardust || particles[i].theme == .snowflakes {
                 // Loose glitter expands and eases to a stop, without sagging into a falling tail.
                 particles[i].vx *= exp(-2.1 * dt)
                 particles[i].vy *= exp(-2.1 * dt)
-            } else if [.butterflies, .bubbles, .snowflakes, .clover].contains(particles[i].theme) {
+            } else if [.butterflies, .bubbles, .clover].contains(particles[i].theme) {
                 let age = time - particles[i].born
                 let theme = particles[i].theme
-                let targetY: Double = theme == .bubbles ? 22 : theme == .butterflies ? 12 : theme == .snowflakes ? -18 : -12
+                let targetY: Double = theme == .bubbles ? 22 : theme == .butterflies ? 12 : -12
                 particles[i].vy += (targetY - particles[i].vy) * (1 - exp(-2 * dt))
                 particles[i].vx *= exp(-1.6 * dt)
                 particles[i].x += sin(age * (theme == .butterflies ? 7 : 3) + particles[i].phase) * 12 * dt
@@ -213,7 +213,7 @@ final class ParticleSystem {
         }
         emissionBudget = min(8, emissionBudget + dt * 90 * settings.density)
         guard distance > 0.2 else { return }
-        let spacing = (settings.theme == .stardust ? 17.0 : 11.0) / settings.density
+        let spacing = (settings.theme == .snowflakes ? 8.0 : settings.theme == .stardust ? 17.0 : 11.0) / settings.density
         let total = distance + distanceRemainder
         let count = min(12, min(Int(total / spacing), Int(emissionBudget)))
         distanceRemainder = total.truncatingRemainder(dividingBy: spacing)
@@ -230,11 +230,11 @@ final class ParticleSystem {
     }
     private func spawn(x: Double, y: Double, at time: Double, settings s: TrailSettings, burst: Bool) {
         let direction = random() * 2 * .pi
-        let speed = burst ? 35 + random() * 65 : (s.theme == .stardust ? 30 + random() * 80 : 5 + random() * 22)
+        let speed = burst ? 35 + random() * 65 : ((s.theme == .stardust || s.theme == .snowflakes) ? 30 + random() * 80 : 5 + random() * 22)
         particles.append(Particle(x: x + (random() - 0.5) * 8, y: y + (random() - 0.5) * 8,
             vx: cos(direction) * speed, vy: sin(direction) * speed + (burst ? 8 : 6),
             born: time, life: s.lifetime * (0.65 + random() * 0.65),
-            size: s.size * ([TrailTheme.butterflies, .bubbles, .clover, .snowflakes].contains(s.theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
+            size: s.size * (s.theme == .snowflakes ? 0.38 + random() * 0.37 : [TrailTheme.butterflies, .bubbles, .clover].contains(s.theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
             spin: (random() - 0.5) * ([TrailTheme.flowers, .clover, .snowflakes].contains(s.theme) ? 2.4 : 0.65),
             phase: random() * 2 * .pi, color: Int(random() * Double(s.theme.colors.count)), theme: s.theme, alpha: s.opacity))
         if particles.count > limit { particles.removeFirst(particles.count - limit) }
@@ -530,6 +530,22 @@ func runParticleTests() {
         system.tick(at: 10, cursor: nil, settings: settings)
         precondition(system.particles.isEmpty, "New motifs must fully expire")
     }
+    let snowSettings = TrailSettings(persistent: false), snow = ParticleSystem()
+    snowSettings.theme = .snowflakes
+    for frame in 0...30 {
+        snow.tick(at: Double(frame) / 60, cursor: CGPoint(x: frame * 4, y: 100), settings: snowSettings)
+    }
+    precondition(snow.particles.count >= 10 && snow.particles.allSatisfy { $0.size < snowSettings.size * 0.8 }, "Snow must emit multiple small flakes")
+    precondition(snow.particles.contains { $0.vx < -10 } && snow.particles.contains { $0.vx > 10 } &&
+                 snow.particles.contains { $0.vy < -10 } && snow.particles.contains { $0.vy > 10 }, "Snow must scatter in all directions")
+    let emitted = snow.particles
+    snow.tick(at: 0.55, cursor: nil, settings: snowSettings)
+    for (before, after) in zip(emitted, snow.particles) {
+        precondition(abs(after.vx) < abs(before.vx) && abs(after.vy) < abs(before.vy), "Scattered snow must slow without falling acceleration")
+    }
+    snow.tick(at: 10, cursor: nil, settings: snowSettings)
+    precondition(snow.particles.isEmpty, "Scattered snow must fully disappear")
+    print("PASS: small snowflakes, multiple emission, radial scatter, damping and expiry")
     print("PASS: new theme selection, emission, floating/falling motion and expiry")
     let s = TrailSettings(persistent: false), model = ParticleSystem()
     model.tick(at: 0, cursor: .zero, settings: s)
