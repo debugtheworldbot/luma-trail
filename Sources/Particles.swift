@@ -29,7 +29,7 @@ enum TrailTheme: Int, CaseIterable {
         case .rainbow: return "柔光 · 七色丝带 · 缓缓消散"
         case .butterflies: return "薄翼 · 振翅 · 薄荷与粉紫"
         case .bubbles: return "透明 · 虹彩边缘 · 轻轻上浮"
-        case .clover: return "绿色心形叶 · 柔光 · 幸运飘落"
+        case .clover: return "白色心形叶 · 绿色光晕 · 幸运飘落"
         case .snowflakes: return "纯白六角 · 轻旋 · 缓缓飘雪"
         }
     }
@@ -301,15 +301,32 @@ final class ParticlePainter {
             ctx.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
             ctx.fillEllipse(in: CGRect(x: 22, y: -28, width: 5, height: 5))
         case .clover:
-            ctx.setShadow(offset: .zero, blur: 9, color: color.withAlphaComponent(0.6).cgColor)
+            // A white clover suspended in a soft green halo, including on light desktops.
+            ctx.setShadow(offset: .zero, blur: 0)
+            let halo = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [
+                color.withAlphaComponent(0.65).cgColor,
+                color.withAlphaComponent(0.38).cgColor,
+                color.withAlphaComponent(0.12).cgColor,
+                color.withAlphaComponent(0).cgColor
+            ] as CFArray, locations: [0, 0.45, 0.72, 1])!
+            ctx.drawRadialGradient(halo, startCenter: CGPoint(x: 0, y: 4), startRadius: 0,
+                                   endCenter: CGPoint(x: 0, y: 4), endRadius: 59, options: [])
+            ctx.setShadow(offset: .zero, blur: 5, color: color.withAlphaComponent(0.6).cgColor)
+            ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.85).cgColor)
+            ctx.setLineWidth(2); ctx.setLineCap(.round)
+            ctx.move(to: CGPoint(x: 0, y: 5))
+            ctx.addCurve(to: CGPoint(x: 9, y: -49), control1: CGPoint(x: -4, y: -17), control2: CGPoint(x: 5, y: -31))
+            ctx.strokePath()
+            ctx.translateBy(x: 0, y: 6)
+            ctx.rotate(by: .pi / 4 + 0.12)
+            ctx.setFillColor(NSColor.white.cgColor)
+            ctx.setShadow(offset: .zero, blur: 4, color: NSColor.white.withAlphaComponent(0.65).cgColor)
             for i in 0..<4 {
                 ctx.saveGState(); ctx.rotate(by: Double(i) * .pi / 2)
-                let leaf = CGMutablePath(); leaf.move(to: .zero)
-                leaf.addCurve(to: CGPoint(x: 0, y: 41), control1: CGPoint(x: -43, y: 23), control2: CGPoint(x: -22, y: 63))
-                leaf.addCurve(to: .zero, control1: CGPoint(x: 22, y: 63), control2: CGPoint(x: 43, y: 23))
-                ctx.addPath(leaf); ctx.fillPath()
-                ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.3).cgColor); ctx.setLineWidth(1.5)
-                ctx.move(to: CGPoint(x: 0, y: 8)); ctx.addLine(to: CGPoint(x: 0, y: 32)); ctx.strokePath()
+                let leaf = CGMutablePath(); leaf.move(to: CGPoint(x: 0, y: 3))
+                leaf.addCurve(to: CGPoint(x: 0, y: 33), control1: CGPoint(x: -32, y: 16), control2: CGPoint(x: -18, y: 51))
+                leaf.addCurve(to: CGPoint(x: 0, y: 3), control1: CGPoint(x: 18, y: 51), control2: CGPoint(x: 32, y: 16))
+                leaf.closeSubpath(); ctx.addPath(leaf); ctx.fillPath()
                 ctx.restoreGState()
             }
         case .snowflakes:
