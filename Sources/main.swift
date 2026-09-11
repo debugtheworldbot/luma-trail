@@ -98,7 +98,10 @@ final class PreviewView: NSView {
         // Particle preview uses its own illustrative arrow; cursor skins have a separate editor.
         ctx.saveGState(); ctx.translateBy(x: point.x, y: point.y)
         let cursor = CGMutablePath(); cursor.move(to: .zero)
-        cursor.addLines(between: [CGPoint(x: 1, y: -18), CGPoint(x: 5.5, y: -13), CGPoint(x: 10, y: -21), CGPoint(x: 13, y: -19), CGPoint(x: 9, y: -11), CGPoint(x: 16, y: -10)])
+        // Keep the tip in the same subpath; addLines would start a new one at the next vertex.
+        for vertex in [CGPoint(x: 1, y: -18), CGPoint(x: 5.5, y: -13), CGPoint(x: 10, y: -21), CGPoint(x: 13, y: -19), CGPoint(x: 9, y: -11), CGPoint(x: 16, y: -10)] {
+            cursor.addLine(to: vertex)
+        }
         cursor.closeSubpath(); ctx.addPath(cursor); ctx.setFillColor(NSColor.white.cgColor)
         ctx.setStrokeColor(NSColor(hex: 0x30283C).cgColor); ctx.setLineWidth(1); ctx.drawPath(using: .fillStroke); ctx.restoreGState()
         let ink = light ? NSColor(hex: 0x665870) : NSColor(hex: 0xC8BED3)
