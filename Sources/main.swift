@@ -135,7 +135,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var previousButtons = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        NSApp.setActivationPolicy(.accessory)
+        NSApp.setActivationPolicy(UserDefaults.standard.bool(forKey: "showInDock") ? .regular : .accessory)
         // Bring the existing instance forward rather than doubling all overlays.
         if let other = NSRunningApplication.runningApplications(withBundleIdentifier: "studio.luma.trail.mvp").first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
             other.activate(options: [.activateAllWindows]); NSApp.terminate(nil); return
@@ -296,6 +296,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         burstButton.state = settings.clickBurst ? .on : .off
     }
+    @objc func toggleDockVisibility(_ sender: NSButton) {
+        let showInDock = sender.state == .on
+        guard NSApp.setActivationPolicy(showInDock ? .regular : .accessory) else {
+            sender.state = NSApp.activationPolicy() == .regular ? .on : .off
+            return
+        }
+        UserDefaults.standard.set(showInDock, forKey: "showInDock")
+        // Switching activation policy can change focus; keep the settings accessible.
+        DispatchQueue.main.async { [weak self] in self?.showSettings() }
+    }
     @objc func toggleBurst(_ sender: NSButton) { settings.clickBurst = sender.state == .on; settings.save() }
     @objc func toggleBackground(_ sender: NSButton) { preview.light.toggle(); sender.title = preview.light ? "深色背景" : "浅色背景"; preview.needsDisplay = true }
     @objc func resetParameters() {
@@ -366,6 +376,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         put(reset, 668, 547, 124, 27)
         let line = NSBox(); line.boxType = .separator; put(line, 28, 590, 764, 1)
         shortcutLabel = label("⌘ ⇧ S  随时暂停 / 开启", 11, .regular, NSColor(hex: 0x8B7F90)); put(shortcutLabel, 29, 611, 325, 20)
+        let dockButton = NSButton(checkboxWithTitle: "在 Dock 中显示", target: self, action: #selector(toggleDockVisibility(_:)))
+        dockButton.font = .systemFont(ofSize: 12)
+        dockButton.state = UserDefaults.standard.bool(forKey: "showInDock") ? .on : .off
+        put(dockButton, 375, 607, 175, 24)
         enableButton = NSButton(title: "", target: self, action: #selector(toggleEnabled))
         enableButton.bezelStyle = .rounded; enableButton.contentTintColor = NSColor(hex: 0x826197)
         put(enableButton, 565, 603, 157, 32)
