@@ -53,13 +53,16 @@ final class ThemeButton: NSButton {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 14, yRadius: 14)
         (selected ? NSColor(hex: 0xECE3F3) : NSColor.white.withAlphaComponent(0.78)).setFill(); path.fill()
         (selected ? NSColor(hex: 0xAA8BBE) : NSColor(hex: 0xE9E3DE)).setStroke(); path.lineWidth = 1; path.stroke()
-        let image = NSImage(systemSymbolName: theme.symbol, accessibilityDescription: nil)!
-        let configuration = NSImage.SymbolConfiguration(pointSize: 22, weight: .regular)
-            .applying(NSImage.SymbolConfiguration(paletteColors: [NSColor(hex: 0x9876AD)]))
-        image.withSymbolConfiguration(configuration)?.draw(in: NSRect(x: 16, y: 25, width: 25, height: 25))
-        (theme.title as NSString).draw(at: NSPoint(x: 54, y: 38), withAttributes: [.font: NSFont.systemFont(ofSize: 14, weight: .semibold), .foregroundColor: NSColor(hex: 0x423749)])
-        (theme.subtitle as NSString).draw(at: NSPoint(x: 54, y: 18), withAttributes: [.font: NSFont.systemFont(ofSize: 10), .foregroundColor: NSColor(hex: 0x8A7D8E)])
-        if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width - 24, y: 37), withAttributes: [.font: NSFont.systemFont(ofSize: 12, weight: .bold), .foregroundColor: NSColor(hex: 0x9876AD)]) }
+        if theme == .custom {
+            NSImage(systemSymbolName: "photo", accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX - 12, y: 28, width: 24, height: 24))
+        } else {
+            let image = NSImage(cgImage: ParticlePainter.texture(theme: theme, color: theme.colors[0]), size: NSSize(width:128,height:128))
+            image.draw(in: NSRect(x: bounds.midX - 15, y: 25, width: 30, height: 30))
+        }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(hex: 0x423749)]
+        let text = theme.title as NSString
+        text.draw(at: NSPoint(x: (bounds.width - text.size(withAttributes:attributes).width) / 2, y: 10), withAttributes: attributes)
+        if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width - 18, y: bounds.height - 21), withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor(hex: 0x9876AD)]) }
     }
 }
 
@@ -185,7 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let menu = NSMenu()
         let toggle = NSMenuItem(title: settings.enabled ? "暂停桌面效果" : "开启桌面效果", action: #selector(toggleEnabled), keyEquivalent: "")
         toggle.target = self; menu.addItem(toggle); menu.addItem(.separator())
-        for theme in TrailTheme.allCases where theme != .custom || settings.customData != nil {
+        for theme in TrailTheme.displayOrder where theme != .custom || settings.customData != nil {
             let item = NSMenuItem(title: theme.title, action: #selector(menuTheme(_:)), keyEquivalent: "")
             item.target = self; item.tag = theme.rawValue; item.state = settings.theme == theme ? .on : .off; menu.addItem(item)
         }
@@ -345,10 +348,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         put(label("Luma Trail", 30, .semibold), 28, 17, 400, 42)
         put(label("给每一次移动，添一点小小的魔法。", 13, .regular, NSColor(hex: 0x8B7F90)), 29, 65, 430, 21)
         put(label("选择心情", 12, .semibold), 29, 105, 240, 20)
-        for (i, theme) in TrailTheme.allCases.enumerated() {
+        for (i, theme) in TrailTheme.displayOrder.enumerated() {
             let button = ThemeButton(theme: theme, target: self, action: #selector(chooseTheme(_:)))
             button.selected = settings.theme == theme; themeButtons.append(button)
-            put(button, 28, CGFloat(135 + i * 82), 248, 72)
+            button.toolTip = theme.subtitle
+            put(button, CGFloat(28 + (i % 2) * 128), CGFloat(135 + (i / 2) * 55), 120, 55)
         }
         let importButton = NSButton(title: "导入自己的图片…", target: self, action: #selector(importImage))
         importButton.bezelStyle = .rounded; put(importButton, 42, 472, 220, 30)
@@ -398,6 +402,10 @@ if CommandLine.arguments.contains("--self-test") {
     cursorProbe()
 } else if CommandLine.arguments.contains("--cursor-integration-test") {
     cursorIntegrationTest()
+} else if let i = CommandLine.arguments.firstIndex(of: "--render-rainbow"), CommandLine.arguments.count > i + 1 {
+    try renderRainbowFixture(to: CommandLine.arguments[i + 1])
+} else if let i = CommandLine.arguments.firstIndex(of: "--render-themes"), CommandLine.arguments.count > i + 1 {
+    try renderCuteThemeSheet(to: CommandLine.arguments[i + 1])
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-fixture"), CommandLine.arguments.count > i + 1 {
     try renderGlitterFixture(to: CommandLine.arguments[i + 1])
 } else {
