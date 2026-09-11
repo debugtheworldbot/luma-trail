@@ -95,15 +95,15 @@ final class PreviewView: NSView {
             for y in stride(from: 15, to: Int(bounds.height), by: 24) { NSBezierPath(ovalIn: NSRect(x: CGFloat(x), y: CGFloat(y), width: 1.5, height: 1.5)).fill() }
         }
         painter.draw(system.particles, in: ctx, at: ProcessInfo.processInfo.systemUptime, twinkleSpeed: settings.twinkleSpeed)
-        // Particle preview uses its own illustrative arrow; cursor skins have a separate editor.
-        ctx.saveGState(); ctx.translateBy(x: point.x, y: point.y)
-        let cursor = CGMutablePath(); cursor.move(to: .zero)
-        // Keep the tip in the same subpath; addLines would start a new one at the next vertex.
-        for vertex in [CGPoint(x: 1, y: -18), CGPoint(x: 5.5, y: -13), CGPoint(x: 10, y: -21), CGPoint(x: 13, y: -19), CGPoint(x: 9, y: -11), CGPoint(x: 16, y: -10)] {
-            cursor.addLine(to: vertex)
-        }
-        cursor.closeSubpath(); ctx.addPath(cursor); ctx.setFillColor(NSColor.white.cgColor)
-        ctx.setStrokeColor(NSColor(hex: 0x30283C).cgColor); ctx.setLineWidth(1); ctx.drawPath(using: .fillStroke); ctx.restoreGState()
+        // Use the system arrow at its native point size, including its outline and shadow.
+        let cursor = NSCursor.arrow
+        let image = cursor.image
+        // Cursor hotspots are measured from the top left; this view uses bottom-left coordinates.
+        image.draw(in: NSRect(x: point.x - cursor.hotSpot.x,
+                              y: point.y - (image.size.height - cursor.hotSpot.y),
+                              width: image.size.width, height: image.size.height),
+                   from: .zero, operation: .sourceOver, fraction: 1,
+                   respectFlipped: true, hints: nil)
         let ink = light ? NSColor(hex: 0x665870) : NSColor(hex: 0xC8BED3)
         ("LIVE PREVIEW" as NSString).draw(at: NSPoint(x: 20, y: bounds.height - 30), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium), .foregroundColor: ink])
         ((settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停") as NSString).draw(at: NSPoint(x: 20, y: 16), withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: ink])
