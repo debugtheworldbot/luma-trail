@@ -9,7 +9,10 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$CACHE" "$DIST"
 xcrun clang -target arm64-apple-macosx13.0 -fobjc-arc -fmodules -fmodules-cache-path="$CACHE" -c Sources/CursorBridge.m -o "$STAGING/CursorBridge.o"
 xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
   -target arm64-apple-macosx13.0 -framework AppKit -framework Carbon \
-  -import-objc-header Sources/CursorBridge.h "$STAGING/CursorBridge.o" Sources/CursorAppearance.swift Sources/Particles.swift Sources/main.swift -o "$APP/Contents/MacOS/LumaTrail"
+  -import-objc-header Sources/CursorBridge.h "$STAGING/CursorBridge.o" \
+  Sources/CursorAppearance.swift Sources/TrailNature.swift Sources/TrailGlow.swift \
+  Sources/TrailFestive.swift Sources/TrailPaths.swift Sources/Particles.swift Sources/main.swift \
+  -o "$APP/Contents/MacOS/LumaTrail"
 cp Info.plist "$APP/Contents/Info.plist"
 ICONSET="$STAGING/AppIcon.iconset"
 mkdir -p "$ICONSET"

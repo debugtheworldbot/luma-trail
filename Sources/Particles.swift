@@ -3,6 +3,8 @@ import AppKit
 enum TrailTheme: Int, CaseIterable {
     // Raw values 4 and 6 are retired; preserve all remaining saved selections.
     case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8, butterflies = 9, bubbles = 10, clover = 11, snowflakes = 12, mixed = 13
+    case sakura = 14, fireflies = 15, confetti = 16, comet = 17, maple = 18, dandelion = 19, notes = 20
+    case galaxy = 21, pixieDust = 22, aurora = 23, feathers = 24, moonStars = 25, sparkler = 26, ripples = 27
     var title: String {
         switch self {
         case .stardust: return "仙女星尘"
@@ -17,6 +19,20 @@ enum TrailTheme: Int, CaseIterable {
         case .clover: return "幸运四叶草"
         case .snowflakes: return "初雪轻舞"
         case .mixed: return "缤纷混合"
+        case .sakura: return "樱花飞舞"
+        case .fireflies: return "萤火虫语"
+        case .confetti: return "五彩碎纸"
+        case .comet: return "流星曳尾"
+        case .maple: return "秋枫轻转"
+        case .dandelion: return "蒲公英絮"
+        case .notes: return "音符升空"
+        case .galaxy: return "银河星环"
+        case .pixieDust: return "香槟仙尘"
+        case .aurora: return "极光薄纱"
+        case .feathers: return "羽毛轻飘"
+        case .moonStars: return "月牙星语"
+        case .sparkler: return "暖光火花"
+        case .ripples: return "水波涟漪"
         }
     }
     var subtitle: String {
@@ -33,6 +49,20 @@ enum TrailTheme: Int, CaseIterable {
         case .clover: return "白色心形叶 · 绿色光晕 · 幸运飘落"
         case .snowflakes: return "细小雪晶 · 四散 · 轻盈消散"
         case .mixed: return "全部图案等概率随机 · 含已导入图片"
+        case .sakura: return "单瓣 · 侧风 · 轻轻翻滚"
+        case .fireflies: return "暖光 · 环绕指针 · 呼吸闪烁"
+        case .confetti: return "纸片 · 翻面 · 点击炸开"
+        case .comet: return "亮核 · 短尾 · 贴着轨迹"
+        case .maple: return "三裂叶 · 翻滚 · 暖橙"
+        case .dandelion: return "绒伞 · 上升 · 随风横漂"
+        case .notes: return "符头 · 上浮 · 轻轻弹跳"
+        case .galaxy: return "小星 · 绕圈 · 淡紫光晕"
+        case .pixieDust: return "金粉 · 细屑 · 略微下落"
+        case .aurora: return "三色纱带 · 微波 · 半透明"
+        case .feathers: return "绒羽 · 高阻力 · 慢慢翻"
+        case .moonStars: return "月牙 · 小星 · 夜色粉紫"
+        case .sparkler: return "短线火花 · 顺着速度"
+        case .ripples: return "淡环扩散 · 点击更明显"
         }
     }
     var symbol: String {
@@ -49,9 +79,27 @@ enum TrailTheme: Int, CaseIterable {
         case .clover: return "leaf.fill"
         case .snowflakes: return "snowflake"
         case .mixed: return "shuffle"
+        case .sakura: return "fan"
+        case .fireflies: return "light.max"
+        case .confetti: return "party.popper"
+        case .comet: return "sparkle"
+        case .maple: return "leaf.circle"
+        case .dandelion: return "wind"
+        case .notes: return "music.note"
+        case .galaxy: return "moon.stars"
+        case .pixieDust: return "sparkles"
+        case .aurora: return "waveform"
+        case .feathers: return "fanblades"
+        case .moonStars: return "moon.fill"
+        case .sparkler: return "flame"
+        case .ripples: return "circle.dotted"
         }
     }
-    static var displayOrder: [TrailTheme] { [.stardust, .hearts, .flowers, .puppy, .bunny, .rainbow, .butterflies, .bubbles, .clover, .snowflakes, .mixed, .custom] }
+    static var displayOrder: [TrailTheme] {
+        [.stardust, .pixieDust, .sparkler, .hearts, .flowers, .sakura, .maple, .dandelion, .clover,
+         .butterflies, .bubbles, .feathers, .snowflakes, .fireflies, .galaxy, .moonStars,
+         .comet, .aurora, .rainbow, .notes, .confetti, .ripples, .puppy, .bunny, .mixed, .custom]
+    }
     var colors: [NSColor] {
         switch self {
         case .stardust: return [NSColor(hex: 0xF24CB8), NSColor(hex: 0xFF85AC), NSColor(hex: 0xF8AAD9), NSColor(hex: 0xF77791)]
@@ -65,7 +113,28 @@ enum TrailTheme: Int, CaseIterable {
         case .bubbles: return [0xA6D8BE, 0xEFB5D0, 0xACCFEF].map { NSColor(hex: $0) }
         case .clover: return [0x83C86A, 0xA0DA7D, 0x63B67C].map { NSColor(hex: $0) }
         case .snowflakes: return [.white]
+        case .sakura: return [0xF7B7C8, 0xFFE4EC, 0xE89BB0].map { NSColor(hex: $0) }
+        case .fireflies: return [0xF6E38B, 0xC6F0A4, 0xF8C98B].map { NSColor(hex: $0) }
+        case .confetti: return [0xFF8FB3, 0xFFD27A, 0x8ED4C8, 0xB7A6F0].map { NSColor(hex: $0) }
+        case .comet: return [0xF7D9A8, 0xF4B7D2, 0xC9C6F7].map { NSColor(hex: $0) }
+        case .maple: return [0xE8894A, 0xD45D4A, 0xF2C36B].map { NSColor(hex: $0) }
+        case .dandelion: return [0xF6F1DE, 0xE8D9A8, 0xC9B48A].map { NSColor(hex: $0) }
+        case .notes: return [0x6E5B8A, 0xC9A6D8, 0x8BB7D8].map { NSColor(hex: $0) }
+        case .galaxy: return [0xC9C6F7, 0xF4B7D2, 0xAFE2EA].map { NSColor(hex: $0) }
+        case .pixieDust: return [0xF3D48B, 0xF8E7C2, 0xE8B86D].map { NSColor(hex: $0) }
+        case .aurora: return [0xAFE2EA, 0xC4B3ED, 0xFFC6D9].map { NSColor(hex: $0) }
+        case .feathers: return [0xFFF8F2, 0xF3D5C8, 0xE4C4D6].map { NSColor(hex: $0) }
+        case .moonStars: return [0xF6E7C3, 0xE9DEF9, 0xC9C6F7].map { NSColor(hex: $0) }
+        case .sparkler: return [0xFFD27A, 0xF6E38B, 0xFFB3A3].map { NSColor(hex: $0) }
+        case .ripples: return [0x8EC7E6, 0xF2C6DE, 0xB7E3D3].map { NSColor(hex: $0) }
         }
+    }
+    var usesRibbon: Bool { self == .rainbow || self == .comet || self == .aurora }
+    var usesOrbit: Bool { self == .fireflies || self == .galaxy }
+    var usesScatter: Bool { self == .stardust || self == .snowflakes || self == .pixieDust || self == .sparkler }
+    var floatsUp: Bool { self == .butterflies || self == .bubbles || self == .dandelion || self == .notes }
+    var isGentleTwinkle: Bool {
+        [.butterflies, .bubbles, .clover, .snowflakes, .fireflies, .dandelion, .feathers, .moonStars, .aurora, .ripples].contains(self)
     }
 }
 
@@ -155,19 +224,44 @@ final class ParticleSystem {
         particles.removeAll { time - $0.born >= $0.life }
         for i in particles.indices {
             if particles[i].trailStart != nil { continue }
+            let theme = particles[i].theme
+            if theme.usesOrbit {
+                particles[i].phase += particles[i].spin * dt
+                let radius = max(8, particles[i].vx)
+                if let cursor {
+                    particles[i].x = Double(cursor.x) + cos(particles[i].phase) * radius
+                    particles[i].y = Double(cursor.y) + sin(particles[i].phase) * radius
+                }
+                continue
+            }
+            if theme == .ripples {
+                particles[i].size += max(18, particles[i].vy) * dt
+                continue
+            }
             particles[i].x += particles[i].vx * dt
             particles[i].y += particles[i].vy * dt
-            if particles[i].theme == .stardust || particles[i].theme == .snowflakes {
+            if theme.usesScatter {
                 // Loose glitter expands and eases to a stop, without sagging into a falling tail.
                 particles[i].vx *= exp(-2.1 * dt)
                 particles[i].vy *= exp(-2.1 * dt)
-            } else if [.butterflies, .bubbles, .clover].contains(particles[i].theme) {
+                if theme == .pixieDust { particles[i].vy -= 14 * dt }
+                if theme == .sparkler { particles[i].angle = atan2(particles[i].vy, particles[i].vx) - .pi / 2 }
+            } else if theme.floatsUp || theme == .clover {
                 let age = time - particles[i].born
-                let theme = particles[i].theme
-                let targetY: Double = theme == .bubbles ? 22 : theme == .butterflies ? 12 : -12
+                let targetY: Double = theme == .bubbles ? 22 : theme == .butterflies ? 12 : theme == .dandelion ? 18 : theme == .notes ? 20 : -12
                 particles[i].vy += (targetY - particles[i].vy) * (1 - exp(-2 * dt))
                 particles[i].vx *= exp(-1.6 * dt)
-                particles[i].x += sin(age * (theme == .butterflies ? 7 : 3) + particles[i].phase) * 12 * dt
+                let sway = theme == .butterflies ? 7.0 : theme == .dandelion ? 4.0 : 3.0
+                particles[i].x += sin(age * sway + particles[i].phase) * (theme == .dandelion ? 18 : 12) * dt
+            } else if theme == .feathers {
+                particles[i].vy -= 9 * dt
+                particles[i].vx *= exp(-2.4 * dt)
+                particles[i].vy *= exp(-1.1 * dt)
+                particles[i].x += sin((time - particles[i].born) * 2.2 + particles[i].phase) * 16 * dt
+            } else if theme == .sakura || theme == .maple {
+                particles[i].vy -= 22 * dt
+                particles[i].vx *= exp(-1.2 * dt)
+                particles[i].x += sin((time - particles[i].born) * 3 + particles[i].phase) * 14 * dt
             } else {
                 particles[i].vy -= 27 * dt
                 particles[i].vx *= exp(-1.6 * dt)
@@ -187,9 +281,9 @@ final class ParticleSystem {
             distanceRemainder = 0; emissionBudget = 0; rainbowTangent = nil
             return
         }
-        if settings.theme == .rainbow {
+        if settings.theme.usesRibbon {
             guard distance > 0.2 else { previous = start; return }
-            let width = settings.size * 2.8
+            let width = settings.size * (settings.theme == .comet ? 1.8 : settings.theme == .aurora ? 3.4 : 2.8)
             var direction = atan2(dy, dx)
             // Opposite travel directions use the same color order on the first stroke.
             if direction > .pi / 2 { direction -= .pi }
@@ -206,7 +300,7 @@ final class ParticleSystem {
             // re-seed the surviving trail from its new oldest segment on each redraw.
             particles.append(Particle(x: Double(cursor.x), y: Double(cursor.y), vx: 0, vy: 0,
                 born: time, life: settings.lifetime, size: width, angle: angle, spin: 0,
-                phase: startAngle, color: 0, theme: .rainbow, alpha: settings.opacity, trailStart: start,
+                phase: startAngle, color: 0, theme: settings.theme, alpha: settings.opacity, trailStart: start,
                 trailControl1: CGPoint(x: start.x + oldTangent.x * handle, y: start.y + oldTangent.y * handle),
                 trailControl2: CGPoint(x: cursor.x - tangent.x * handle, y: cursor.y - tangent.y * handle),
                 trailBornStart: time - dt))
@@ -216,7 +310,10 @@ final class ParticleSystem {
         }
         emissionBudget = min(8, emissionBudget + dt * 90 * settings.density)
         guard distance > 0.2 else { return }
-        let spacing = (settings.theme == .snowflakes ? 8.0 : settings.theme == .stardust ? 17.0 : 11.0) / settings.density
+        let spacing = (settings.theme == .snowflakes || settings.theme == .pixieDust || settings.theme == .sparkler ? 8.0
+            : settings.theme == .stardust ? 17.0
+            : settings.theme.usesOrbit || settings.theme == .ripples ? 20.0
+            : 11.0) / settings.density
         let total = distance + distanceRemainder
         let count = min(12, min(Int(total / spacing), Int(emissionBudget)))
         distanceRemainder = total.truncatingRemainder(dividingBy: spacing)
@@ -229,20 +326,38 @@ final class ParticleSystem {
         }
     }
     func burst(at point: CGPoint, time: Double, settings: TrailSettings) {
-        for _ in 0..<12 { spawn(x: Double(point.x), y: Double(point.y), at: time, settings: settings, burst: true) }
+        let count = settings.theme == .ripples ? 4 : 12
+        for _ in 0..<count { spawn(x: Double(point.x), y: Double(point.y), at: time, settings: settings, burst: true) }
     }
     private func spawn(x: Double, y: Double, at time: Double, settings s: TrailSettings, burst: Bool) {
         // Resolve once per particle so color, size and motion use the same motif.
         let choices = TrailTheme.allCases.filter { $0 != .mixed && ($0 != .custom || s.customData != nil) }
         let theme = s.theme == .mixed ? choices[Int(random() * Double(choices.count))] : s.theme
         let direction = random() * 2 * .pi
-        let speed = burst ? 35 + random() * 65 : ((theme == .stardust || theme == .snowflakes) ? 30 + random() * 80 : 5 + random() * 22)
-        particles.append(Particle(x: x + (random() - 0.5) * 8, y: y + (random() - 0.5) * 8,
-            vx: cos(direction) * speed, vy: sin(direction) * speed + (burst ? 8 : 6),
-            born: time, life: s.lifetime * (0.65 + random() * 0.65),
-            size: s.size * (theme == .snowflakes ? 0.38 + random() * 0.37 : [TrailTheme.butterflies, .bubbles, .clover].contains(theme) ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85), angle: (random() - 0.5) * 0.9,
-            spin: (random() - 0.5) * ([TrailTheme.flowers, .clover, .snowflakes].contains(theme) ? 2.4 : 0.65),
-            phase: random() * 2 * .pi, color: Int(random() * Double(theme.colors.count)), theme: theme, alpha: s.opacity))
+        if theme.usesOrbit {
+            particles.append(Particle(x: x, y: y, vx: 14 + random() * 32, vy: 0,
+                born: time, life: s.lifetime * (0.8 + random() * 0.5),
+                size: s.size * (0.45 + random() * 0.4), angle: 0,
+                spin: (random() < 0.5 ? -1 : 1) * (1.1 + random() * 2.4),
+                phase: random() * 2 * .pi, color: Int(random() * Double(theme.colors.count)), theme: theme, alpha: s.opacity))
+        } else if theme == .ripples {
+            particles.append(Particle(x: x, y: y, vx: 0, vy: 28 + random() * 36,
+                born: time, life: s.lifetime * (0.7 + random() * 0.4),
+                size: s.size * (burst ? 0.45 : 0.22), angle: 0, spin: 0,
+                phase: random() * 2 * .pi, color: Int(random() * Double(theme.colors.count)), theme: theme, alpha: s.opacity))
+        } else {
+            let scatter = theme.usesScatter
+            let speed = burst ? 35 + random() * 65 : (scatter ? 30 + random() * 80 : 5 + random() * 22)
+            let big = [TrailTheme.butterflies, .bubbles, .clover, .dandelion, .notes, .feathers, .moonStars].contains(theme)
+            let spinny = [TrailTheme.flowers, .clover, .snowflakes, .sakura, .maple, .confetti, .feathers].contains(theme)
+            particles.append(Particle(x: x + (random() - 0.5) * 8, y: y + (random() - 0.5) * 8,
+                vx: cos(direction) * speed, vy: sin(direction) * speed + (burst ? 8 : 6),
+                born: time, life: s.lifetime * (0.65 + random() * 0.65),
+                size: s.size * (theme == .snowflakes || theme == .pixieDust ? 0.38 + random() * 0.37 : big ? 0.8 + random() * 0.6 : 0.35 + random() * 0.85),
+                angle: (random() - 0.5) * 0.9,
+                spin: (random() - 0.5) * (spinny ? 2.4 : 0.65),
+                phase: random() * 2 * .pi, color: Int(random() * Double(theme.colors.count)), theme: theme, alpha: s.opacity))
+        }
         if particles.count > limit { particles.removeFirst(particles.count - limit) }
     }
     var bounds: CGRect {
@@ -272,6 +387,21 @@ final class ParticlePainter {
         ctx.setShadow(offset: .zero, blur: theme == .stardust ? 5 : 3, color: color.withAlphaComponent(0.5).cgColor)
         ctx.setFillColor(color.cgColor)
         switch theme {
+        case .sakura: TrailNature.drawSakura(ctx, color: color)
+        case .maple: TrailNature.drawMaple(ctx, color: color)
+        case .dandelion: TrailNature.drawDandelion(ctx, color: color)
+        case .feathers: TrailNature.drawFeather(ctx, color: color)
+        case .fireflies: TrailGlow.drawFirefly(ctx, color: color)
+        case .galaxy: TrailGlow.drawGalaxyStar(ctx, color: color)
+        case .pixieDust: TrailGlow.drawPixieDust(ctx, color: color)
+        case .sparkler: TrailGlow.drawSparkler(ctx, color: color)
+        case .confetti: TrailFestive.drawConfetti(ctx, color: color)
+        case .notes: TrailFestive.drawNote(ctx, color: color)
+        case .moonStars: TrailFestive.drawMoon(ctx, color: color)
+        case .comet: TrailCardArt.drawComet(ctx, color: color)
+        case .aurora: TrailCardArt.drawAurora(ctx, color: color)
+        case .ripples: TrailCardArt.drawRipples(ctx, color: color)
+        case .mixed, .custom: break
         case .butterflies:
             ctx.setShadow(offset: .zero, blur: 8, color: color.withAlphaComponent(0.55).cgColor)
             for side in [-1.0, 1.0] {
@@ -353,7 +483,7 @@ final class ParticlePainter {
                 ctx.addArc(center: CGPoint(x: 0, y: -30), radius: CGFloat(57 - index * 7), startAngle: 0, endAngle: .pi, clockwise: false)
                 ctx.strokePath()
             }
-        case .stardust, .custom, .mixed:
+        case .stardust:
             let path = CGMutablePath()
             path.move(to: CGPoint(x: 0, y: 49))
             path.addCurve(to: CGPoint(x: 49, y: 0), control1: CGPoint(x: 13, y: 13), control2: CGPoint(x: 13, y: 13))
@@ -495,21 +625,26 @@ final class ParticlePainter {
     }
     func draw(_ particles: [Particle], in ctx: CGContext, origin: CGPoint = .zero, at time: Double, twinkleSpeed: Double) {
         ctx.interpolationQuality = .high
-        drawRainbow(particles, in: ctx, origin: origin, at: time)
-        for p in particles where p.trailStart == nil {
+        drawRainbow(particles.filter { $0.theme == .rainbow }, in: ctx, origin: origin, at: time)
+        drawComet(particles, in: ctx, origin: origin, at: time)
+        drawAurora(particles, in: ctx, origin: origin, at: time)
+        drawRipples(particles, in: ctx, origin: origin, at: time)
+        for p in particles where p.trailStart == nil && p.theme != .ripples {
             let progress = max(0, min(1, (time - p.born) / p.life))
             let fade = pow(1 - progress, 0.85) * min(1, (time - p.born) / 0.035)
             // Independent phases make each element shimmer instead of blinking the whole trail at once.
             let wave = (sin((time - p.born) * 2 * .pi * twinkleSpeed + p.phase) + 1) / 2
-            let gentle = [TrailTheme.butterflies, .bubbles, .clover, .snowflakes].contains(p.theme)
-            let twinkle = gentle ? 0.85 + 0.15 * wave : 0.18 + 0.82 * wave
-            let size = p.size * (1 - progress * 0.55) * (p.theme == .stardust ? 0.72 + 0.28 * wave : 1)
+            let twinkle = p.theme.isGentleTwinkle ? 0.85 + 0.15 * wave : 0.18 + 0.82 * wave
+            let size = p.size * (1 - progress * 0.55) * (p.theme == .stardust || p.theme == .pixieDust ? 0.72 + 0.28 * wave : 1)
             guard let texture = p.theme == .custom ? custom : textures["\(p.theme.rawValue)-\(p.color)"] else { continue }
             ctx.saveGState()
             ctx.translateBy(x: p.x - Double(origin.x), y: p.y - Double(origin.y))
             ctx.rotate(by: p.angle); ctx.setAlpha(max(0, fade * twinkle * p.alpha))
             if p.theme == .butterflies {
                 ctx.scaleBy(x: 0.5 + 0.5 * abs(cos((time - p.born) * 9 + p.phase)), y: 1)
+            } else if p.theme == .fireflies {
+                let pulse = 0.75 + 0.25 * wave
+                ctx.scaleBy(x: pulse, y: pulse)
             }
             ctx.draw(texture, in: CGRect(x: -size / 2, y: -size / 2, width: size, height: size))
             ctx.restoreGState()
@@ -518,7 +653,7 @@ final class ParticlePainter {
 }
 
 func runParticleTests() {
-    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13], "Remaining saved theme IDs must stay stable")
+    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27], "Remaining saved theme IDs must stay stable")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
     }
@@ -544,17 +679,19 @@ func runParticleTests() {
         let average = 24_000.0 / Double(expected.count)
         precondition(counts.values.allSatisfy { abs(Double($0) - average) < average * 0.1 }, "Mixed motifs must have approximately equal frequency")
         mixed.reset()
-        for frame in 0...120 {
+        var seen: Set<TrailTheme> = []
+        for frame in 0...400 {
             mixed.tick(at: Double(frame) / 60, cursor: CGPoint(x: frame * 5, y: 100), settings: mixedSettings)
+            seen.formUnion(mixed.particles.map(\.theme))
         }
-        precondition(Set(mixed.particles.map(\.theme)) == Set(expected), "Movement must emit mixed motifs too")
+        precondition(seen == Set(expected), "Movement must emit mixed motifs too")
         precondition(mixed.particles.count <= mixed.limit, "Mixed particles must stay bounded")
         mixed.tick(at: 10, cursor: nil, settings: mixedSettings)
         precondition(mixed.particles.isEmpty, "Mixed motifs must expire")
         precondition(mixedSettings.theme == .mixed, "Emission must preserve the selected mixed setting")
     }
     print("PASS: mixed motif coverage, equal frequency, custom image inclusion, movement and expiry")
-    for theme in [TrailTheme.butterflies, .bubbles, .clover, .snowflakes] {
+    for theme in [TrailTheme.butterflies, .bubbles, .clover, .snowflakes, .sakura, .dandelion, .notes, .feathers] {
         let settings = TrailSettings(persistent: false), system = ParticleSystem()
         settings.theme = theme
         for frame in 0...60 {
@@ -563,10 +700,48 @@ func runParticleTests() {
         precondition(!system.particles.isEmpty && system.particles.allSatisfy { $0.theme == theme }, "New themes must emit their selected motif")
         system.particles = [Particle(x: 0, y: 0, vx: 0, vy: 0, born: 1, life: 2, size: 24, angle: 0, spin: 1, phase: 0, color: 0, theme: theme, alpha: 1)]
         for frame in 61...90 { system.tick(at: Double(frame) / 60, cursor: nil, settings: settings) }
-        precondition((system.particles[0].y > 0) == (theme == .bubbles || theme == .butterflies), "Floating and falling themes must move in the intended direction")
+        let rises = theme.floatsUp
+        precondition((system.particles[0].y > 0) == rises, "Floating and falling themes must move in the intended direction")
         system.tick(at: 10, cursor: nil, settings: settings)
         precondition(system.particles.isEmpty, "New motifs must fully expire")
     }
+    let orbitSettings = TrailSettings(persistent: false), orbit = ParticleSystem()
+    orbitSettings.theme = .fireflies
+    for frame in 0...40 {
+        orbit.tick(at: Double(frame) / 60, cursor: CGPoint(x: 200 + frame * 3, y: 160), settings: orbitSettings)
+    }
+    let focus = CGPoint(x: 200 + 40 * 3, y: 160)
+    precondition(!orbit.particles.isEmpty && orbit.particles.allSatisfy { hypot($0.x - focus.x, $0.y - focus.y) < 55 }, "Fireflies must stay in a ring around the cursor")
+    orbit.tick(at: 8, cursor: nil, settings: orbitSettings)
+    precondition(orbit.particles.isEmpty, "Orbiting motifs must expire")
+    let cometSettings = TrailSettings(persistent: false), comet = ParticleSystem()
+    cometSettings.theme = .comet
+    for frame in 0...30 {
+        comet.tick(at: Double(frame) / 60, cursor: CGPoint(x: frame * 5, y: 90), settings: cometSettings)
+    }
+    precondition(comet.particles.count == 30 && comet.particles.allSatisfy { $0.trailStart != nil && $0.theme == .comet }, "Comet must emit connected ribbon segments")
+    let rippleSettings = TrailSettings(persistent: false), ripples = ParticleSystem()
+    rippleSettings.theme = .ripples
+    ripples.tick(at: 0, cursor: CGPoint(x: 40, y: 40), settings: rippleSettings)
+    ripples.burst(at: CGPoint(x: 40, y: 40), time: 0, settings: rippleSettings)
+    precondition(ripples.particles.count == 4, "Ripple clicks spawn a few expanding rings")
+    let before = ripples.particles[0].size
+    ripples.tick(at: 0.2, cursor: nil, settings: rippleSettings)
+    precondition(ripples.particles[0].size > before, "Ripples must grow")
+    for theme in TrailTheme.allCases where theme != .custom && theme != .mixed {
+        let image = ParticlePainter.texture(theme: theme, color: theme.colors[0])
+        let probe = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        probe.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let pixels = probe.data!.assumingMemoryBound(to: UInt8.self)
+        var ink = 0
+        let stride = probe.bytesPerRow
+        for y in 0..<image.height {
+            for x in 0..<image.width { ink = max(ink, Int(pixels[y * stride + x * 4 + 3])) }
+        }
+        precondition(ink > 20, "\(theme.title) card art must be visible")
+    }
+    print("PASS: orbiting fireflies, comet ribbon, expanding ripples, visible card art")
     let snowSettings = TrailSettings(persistent: false), snow = ParticleSystem()
     snowSettings.theme = .snowflakes
     for frame in 0...30 {

@@ -31,6 +31,10 @@ final class Surface: NSView {
     override func draw(_ dirtyRect: NSRect) { NSColor(hex: 0xF9F6F2).setFill(); bounds.fill() }
 }
 
+final class ThemeBoard: NSView {
+    override var isFlipped: Bool { true }
+}
+
 func label(_ text: String, _ size: CGFloat, _ weight: NSFont.Weight = .regular,
            _ color: NSColor = NSColor(hex: 0x39343D)) -> NSTextField {
     let v = NSTextField(labelWithString: text)
@@ -53,8 +57,8 @@ final class ThemeButton: NSButton {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 14, yRadius: 14)
         (selected ? NSColor(hex: 0xECE3F3) : NSColor.white.withAlphaComponent(0.78)).setFill(); path.fill()
         (selected ? NSColor(hex: 0xAA8BBE) : NSColor(hex: 0xE9E3DE)).setStroke(); path.lineWidth = 1; path.stroke()
-        if theme == .custom {
-            NSImage(systemSymbolName: "photo", accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX - 12, y: 28, width: 24, height: 24))
+        if theme == .custom || theme == .mixed {
+            NSImage(systemSymbolName: theme.symbol, accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX - 12, y: 28, width: 24, height: 24))
         } else {
             let image = NSImage(cgImage: ParticlePainter.texture(theme: theme, color: theme.colors[0]), size: NSSize(width:128,height:128))
             image.draw(in: NSRect(x: bounds.midX - 15, y: 25, width: 30, height: 30))
@@ -348,12 +352,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         put(label("Luma Trail", 30, .semibold), 28, 17, 400, 42)
         put(label("给每一次移动，添一点小小的魔法。", 13, .regular, NSColor(hex: 0x8B7F90)), 29, 65, 430, 21)
         put(label("选择心情", 12, .semibold), 29, 105, 240, 20)
-        for (i, theme) in TrailTheme.displayOrder.enumerated() {
+        let themes = TrailTheme.displayOrder
+        let rows = (themes.count + 1) / 2
+        let board = ThemeBoard(frame: NSRect(x: 0, y: 0, width: 248, height: CGFloat(rows) * 52))
+        for (i, theme) in themes.enumerated() {
             let button = ThemeButton(theme: theme, target: self, action: #selector(chooseTheme(_:)))
             button.selected = settings.theme == theme; themeButtons.append(button)
             button.toolTip = theme.subtitle
-            put(button, CGFloat(28 + (i % 2) * 128), CGFloat(135 + (i / 2) * 55), 120, 55)
+            button.frame = NSRect(x: CGFloat(i % 2) * 128, y: CGFloat(i / 2) * 52, width: 120, height: 50)
+            board.addSubview(button)
         }
+        let scroller = NSScrollView(frame: .zero)
+        scroller.drawsBackground = false; scroller.hasVerticalScroller = true; scroller.borderType = .noBorder
+        scroller.documentView = board; scroller.autohidesScrollers = true
+        put(scroller, 28, 132, 264, 328)
         let importButton = NSButton(title: "导入自己的图片…", target: self, action: #selector(importImage))
         importButton.bezelStyle = .rounded; put(importButton, 42, 472, 220, 30)
         let cursorButton = NSButton(title: "鼠标外观与状态图片…", target: self, action: #selector(showCursorAppearance))
