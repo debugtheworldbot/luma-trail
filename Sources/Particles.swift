@@ -211,6 +211,7 @@ final class ParticleSystem {
     private var rainbowAngle: Double?
     private var rainbowTangent: CGPoint?
     private var seed: UInt64 = 0x57A41234
+    private var inkDistance = 0.0
     private var inkColor = -1
     private var inkDeadline = 0.0
     private var inkEmissions = 0
@@ -231,7 +232,7 @@ final class ParticleSystem {
     func reset() {
         particles.removeAll(keepingCapacity: true); previous = nil; lastTime = nil
         distanceRemainder = 0; emissionBudget = 0
-        inkColor = -1; inkDeadline = 0; inkEmissions = 0
+        inkColor = -1; inkDeadline = 0; inkEmissions = 0; inkDistance = 0
         rainbowAngle = nil; rainbowTangent = nil
     }
     func tick(at time: Double, cursor: CGPoint?, settings: TrailSettings) {
@@ -305,9 +306,10 @@ final class ParticleSystem {
             inkEmissions += Int(time * 8) != Int((time - dt) * 8) ? 1 : 0
             // Store the exact previous endpoint, independent of density or pointer speed.
             particles.append(Particle(x: Double(cursor.x), y: Double(cursor.y), vx: 0, vy: 0,
-                born: time, life: settings.lifetime, size: settings.size * 0.9,
-                angle: 0, spin: 0, phase: time * 5, color: inkColor, theme: .splatoon,
+                born: time, life: settings.lifetime, size: settings.size * 1.5,
+                angle: 0, spin: 0, phase: inkDistance, color: inkColor, theme: .splatoon,
                 alpha: settings.opacity, trailStart: start, trailBornStart: time - dt))
+            inkDistance += distance
             if particles.count > limit { particles.removeFirst(particles.count - limit) }
             return
         }
@@ -401,8 +403,9 @@ final class ParticleSystem {
     }
     var bounds: CGRect {
         particles.reduce(CGRect.null) { result, p in
-            let end = CGRect(x: p.x - p.size, y: p.y - p.size, width: p.size * 2, height: p.size * 2)
-            let start = p.trailStart.map { CGRect(x: $0.x - p.size, y: $0.y - p.size, width: p.size * 2, height: p.size * 2) } ?? end
+            let radius = p.size * (p.theme == .splatoon ? 1.6 : 1)
+            let end = CGRect(x: p.x - radius, y: p.y - radius, width: radius * 2, height: radius * 2)
+            let start = p.trailStart.map { CGRect(x: $0.x - radius, y: $0.y - radius, width: radius * 2, height: radius * 2) } ?? end
             return result.union(end).union(start)
         }
     }
@@ -670,18 +673,8 @@ final class ParticlePainter {
         drawAurora(particles, in: ctx, origin: origin, at: time)
         drawRipples(particles, in: ctx, origin: origin, at: time)
         TrailInk.drawTrail(particles, in: ctx, origin: origin, at: time)
-        for p in particles where p.trailStart == nil && p.theme != .ripples {
+        for p in particles where p.trailStart == nil && p.theme != .ripples && p.theme != .splatoon {
             let progress = max(0, min(1, (time - p.born) / p.life))
-            if p.theme == .splatoon {
-                ctx.saveGState()
-                ctx.translateBy(x: p.x - Double(origin.x), y: p.y - Double(origin.y))
-                let spread = 0.72 + 0.28 * min(1, (time - p.born) / 0.09)
-                ctx.scaleBy(x: p.size / 128 * spread, y: p.size / 128 * spread)
-                ctx.setAlpha(p.alpha * (1 - pow(progress, 4)))
-                TrailInk.draw(ctx, color: p.theme.colors[p.color], phase: p.phase, age: max(0, time - p.born))
-                ctx.restoreGState()
-                continue
-            }
             let fade = pow(1 - progress, 0.85) * min(1, (time - p.born) / 0.035)
             // Independent phases make each element shimmer instead of blinking the whole trail at once.
             let wave = (sin((time - p.born) * 2 * .pi * twinkleSpeed + p.phase) + 1) / 2
@@ -742,6 +735,7 @@ func runParticleTests() {
     let inkCount = inkSystem.particles.count
     inkSystem.tick(at: 0.1, cursor: CGPoint(x: 1400, y: 40), settings: inkSettings)
     precondition(inkSystem.particles.count == inkCount, "Pointer teleports must not connect ink across screens")
+    runInkRenderingTests()
     print("PASS: ink batch colors, timed and count switches, anchored splats, bounded memory")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")

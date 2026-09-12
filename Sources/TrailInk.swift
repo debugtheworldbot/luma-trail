@@ -1,67 +1,156 @@
 import AppKit
 
-/// Opaque, rounded paint with local specular reflections; no glitter or outer glow.
+/// Paint impacts merge into a single coverage mask before surface lighting is applied.
 enum TrailInk {
+    private static let surface: [(Double, Double)] = (0..<(128 * 128)).map { index in
+        let x = Double(index % 128) * 2 * .pi / 128, y = Double(index / 128) * 2 * .pi / 128
+        let ripple = sin(x * 4 + sin(y * 3) * 2) * cos(y * 4 + sin(x * 2))
+        let broad = sin(x + y) * sin(y - x)
+        return (ripple * 0.024 + broad * 0.025, pow(max(0, ripple), 12) * 0.075)
+    }
+
+    static func noise(_ value: Double) -> Double {
+        let n = sin(value * 127.1 + 311.7) * 43758.5453
+        return n - floor(n)
+    }
+
+    static func impact(center: CGPoint, radius: Double, seed: Double, age: Double) -> CGPath {
+        let shape = CGMutablePath()
+        var points: [CGPoint] = []
+        let lobes = 7 + Int(noise(seed + 8) * 5)
+        for i in 0..<64 {
+            let angle = Double(i) * 2 * .pi / 64
+            let lobe = pow(max(0, sin(angle * Double(lobes) + seed)), 4)
+            let r = radius * (0.79 + 0.15 * sin(angle * 3 + seed * 2) + 0.18 * lobe)
+            points.append(CGPoint(x: center.x + cos(angle) * r, y: center.y + sin(angle) * r * 0.92))
+        }
+        let first = points[0], last = points[63]
+        shape.move(to: CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2))
+        for i in points.indices {
+            let next = points[(i + 1) % points.count]
+            shape.addQuadCurve(to: CGPoint(x: (points[i].x + next.x) / 2, y: (points[i].y + next.y) / 2), control: points[i])
+        }
+        shape.closeSubpath()
+        // Small satellite impacts use the same material as the paint coverage.
+        for i in 0..<(noise(seed + 31) < 0.38 ? 2 : 0) {
+            let n = seed + Double(i) * 3.71
+            let angle = noise(n) * .pi * 2
+            let reach = radius * (1.12 + noise(n + 1) * 0.45)
+            let r = radius * (0.025 + noise(n + 2) * 0.08)
+            shape.addEllipse(in: CGRect(x: center.x + cos(angle) * reach - r,
+                                       y: center.y + sin(angle) * reach - r, width: r * 2, height: r * 2))
+        }
+        if noise(seed + 17) < 0.24 {
+            let x = center.x + (noise(seed + 19) - 0.5) * radius * 0.65
+            let bottom = center.y - radius * 0.67
+            let length = radius * (0.18 + noise(seed + 20) * 0.52) * min(1, max(0, age - 0.08) / 0.8)
+            let w = radius * (0.055 + noise(seed + 21) * 0.045)
+            let drip = CGMutablePath()
+            drip.move(to: CGPoint(x: x, y: bottom + radius * 0.3))
+            drip.addCurve(to: CGPoint(x: x + w * 0.5, y: bottom - length),
+                          control1: CGPoint(x: x - w, y: bottom), control2: CGPoint(x: x + w * 0.4, y: bottom - length * 0.8))
+            shape.addPath(drip.copy(strokingWithWidth: w * 2, lineCap: .round, lineJoin: .round, miterLimit: 1))
+        }
+        return shape
+    }
+
+    /// Lighting is derived from the merged mask, so there are no bead outlines or tube highlights.
+    static func paint(_ shape: CGPath, color: NSColor, in ctx: CGContext) {
+        let bounds = shape.boundingBoxOfPath.insetBy(dx: -3, dy: -3).integral
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let scale = min(2, min(1400 / max(bounds.width, bounds.height), sqrt(260_000 / (bounds.width * bounds.height))))
+        let width = max(1, Int(ceil(bounds.width * scale))), height = max(1, Int(ceil(bounds.height * scale)))
+        guard let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = bitmap.data else { return }
+        bitmap.scaleBy(x: scale, y: scale)
+        bitmap.translateBy(x: -bounds.minX, y: -bounds.minY)
+        bitmap.setFillColor(NSColor.white.cgColor)
+        // Fill contours independently: mixed path winding must never punch holes at overlaps.
+        shape.applyWithBlock { pointer in
+            let element = pointer.pointee
+            switch element.type {
+            case .moveToPoint: bitmap.move(to: element.points[0])
+            case .addLineToPoint: bitmap.addLine(to: element.points[0])
+            case .addQuadCurveToPoint: bitmap.addQuadCurve(to: element.points[1], control: element.points[0])
+            case .addCurveToPoint: bitmap.addCurve(to: element.points[2], control1: element.points[0], control2: element.points[1])
+            case .closeSubpath: bitmap.closePath(); bitmap.fillPath()
+            @unknown default: break
+            }
+        }
+        let pixels = data.assumingMemoryBound(to: UInt8.self)
+        let rgb = color.usingColorSpace(.deviceRGB)!
+        let base = [Double(rgb.redComponent), Double(rgb.greenComponent), Double(rgb.blueComponent)]
+        // Alpha remains unchanged while RGB is shaded, permitting in-place normal estimation.
+        let step = max(1, Int(scale * 1.2))
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let alpha = Double(pixels[offset + 3]) / 255
+                if alpha == 0 { continue }
+                func coverage(_ dx: Int, _ dy: Int) -> Double {
+                    let xx = max(0, min(width - 1, x + dx)), yy = max(0, min(height - 1, y + dy))
+                    return Double(pixels[(yy * width + xx) * 4 + 3]) / 255
+                }
+                let edge = (coverage(-step, 0) - coverage(step, 0)) * 0.12
+                    + (coverage(0, -step) - coverage(0, step)) * 0.2
+                let px = bounds.minX + Double(x) / scale, py = bounds.minY + Double(y) / scale
+                // Low-contrast uneven wet surface, anchored to wall coordinates rather than each shot.
+                let surfaceX = ((Int(floor(px)) % 128) + 128) % 128
+                let surfaceY = ((Int(floor(py)) % 128) + 128) % 128
+                let material = surface[surfaceY * 128 + surfaceX]
+                let light = edge + material.0
+                let specular = material.1
+                for channel in 0..<3 {
+                    let value = base[channel] * (0.97 + min(0, light)) + max(0, light) * (1 - base[channel]) + specular
+                    pixels[offset + channel] = UInt8(max(0, min(255, value * alpha * 255)))
+                }
+            }
+        }
+        if let image = bitmap.makeImage() { ctx.draw(image, in: bounds) }
+    }
+
     static func drawTrail(_ particles: [Particle], in ctx: CGContext, origin: CGPoint, at time: Double) {
         var runs: [[Particle]] = []
-        for p in particles where p.theme == .splatoon && p.trailStart != nil {
-            if let last = runs.last?.last, last.color == p.color,
-               p.trailStart == CGPoint(x: last.x, y: last.y) {
+        for p in particles where p.theme == .splatoon {
+            if let last = runs.last?.last, last.color == p.color {
                 runs[runs.count - 1].append(p)
-            } else {
-                runs.append([p])
-            }
+            } else { runs.append([p]) }
         }
         ctx.saveGState()
         ctx.translateBy(x: -origin.x, y: -origin.y)
-        ctx.setLineCap(.round)
-        ctx.setLineJoin(.round)
         for run in runs {
             guard let newest = run.last else { continue }
-            let body = CGMutablePath(), sheen = CGMutablePath(), shade = CGMutablePath()
-            for (index, p) in run.enumerated() {
-                guard let start = p.trailStart else { continue }
-                let end = CGPoint(x: p.x, y: p.y)
-                let age = max(0, time - p.born)
-                let width = p.size * (0.94 + 0.07 * sin(p.phase) + 0.035 * sin(p.phase * 2.7))
-                let line = CGMutablePath()
-                line.move(to: start); line.addLine(to: end)
-                body.addPath(line.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 1))
-                let shine = CGMutablePath()
-                shine.move(to: CGPoint(x: start.x, y: start.y + width * 0.23))
-                shine.addLine(to: CGPoint(x: end.x, y: end.y + width * 0.23))
-                sheen.addPath(shine.copy(strokingWithWidth: width * 0.12, lineCap: .round, lineJoin: .round, miterLimit: 1))
-                let lowerEdge = CGMutablePath()
-                lowerEdge.move(to: CGPoint(x: start.x, y: start.y - width * 0.3))
-                lowerEdge.addLine(to: CGPoint(x: end.x, y: end.y - width * 0.3))
-                shade.addPath(lowerEdge.copy(strokingWithWidth: width * 0.17, lineCap: .round, lineJoin: .round, miterLimit: 1))
-                // Sparse edge details stay attached to a continuous body, including during fast moves.
-                if Int(p.born * 5) != Int((p.trailBornStart ?? p.born) * 5), sin(p.phase * 7) > -0.3 {
-                    let length = min(p.size * 0.65, max(0, age - 0.15) * (11 + 5 * sin(p.phase * 3)))
-                    let drip = CGMutablePath()
-                    drip.move(to: end)
-                    drip.addQuadCurve(to: CGPoint(x: p.x + 1, y: p.y - width * 0.48 - length),
-                                      control: CGPoint(x: p.x - 2, y: p.y - width * 0.4))
-                    body.addPath(drip.copy(strokingWithWidth: max(1.5, width * 0.11), lineCap: .round, lineJoin: .round, miterLimit: 1))
-                    if index % 3 == 0 {
-                        body.addEllipse(in: CGRect(x: p.x + width * 0.25, y: p.y + width * 0.68, width: 2, height: 2))
+            let body = CGMutablePath()
+            for p in run {
+                guard let start = p.trailStart else {
+                    body.addPath(impact(center: CGPoint(x: p.x, y: p.y), radius: p.size * 0.32,
+                                        seed: p.phase, age: max(0, time - p.born)))
+                    continue
+                }
+                let dx = p.x - start.x, dy = p.y - start.y, distance = hypot(dx, dy)
+                guard distance > 0 else { continue }
+                let bridge = CGMutablePath()
+                bridge.move(to: start); bridge.addLine(to: CGPoint(x: p.x, y: p.y))
+                body.addPath(bridge.copy(strokingWithWidth: p.size * 0.58, lineCap: .round, lineJoin: .round, miterLimit: 1))
+                let spacing = max(2, p.size * 0.24)
+                let first = Int(ceil(p.phase / spacing)), last = Int(floor((p.phase + distance) / spacing))
+                if first <= last {
+                    for index in first...last {
+                        let t = max(0, min(1, (Double(index) * spacing - p.phase) / distance))
+                        let seed = Double(index) + Double(p.color) * 103
+                        let side = (noise(seed + 4) - 0.5) * p.size * 0.22
+                        let center = CGPoint(x: start.x + dx * t - dy / distance * side,
+                                             y: start.y + dy * t + dx / distance * side)
+                        body.addPath(impact(center: center, radius: p.size * (0.43 + noise(seed + 2) * 0.17),
+                                            seed: seed, age: max(0, time - p.born)))
                     }
                 }
             }
-            let color = TrailTheme.splatoon.colors[newest.color]
             let progress = max(0, min(1, (time - newest.born) / newest.life))
-            // Composite each connected color as one surface, so overlapping samples have no seams.
             ctx.saveGState()
             ctx.setAlpha(newest.alpha * (1 - pow(progress, 4)))
-            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
-            ctx.setFillColor(color.cgColor)
-            ctx.addPath(body); ctx.fillPath()
-            ctx.addPath(body); ctx.clip()
-            ctx.setFillColor(NSColor.black.withAlphaComponent(0.12).cgColor)
-            ctx.addPath(shade); ctx.fillPath()
-            ctx.setFillColor(NSColor.white.withAlphaComponent(0.3).cgColor)
-            ctx.addPath(sheen); ctx.fillPath()
-            ctx.endTransparencyLayer()
+            paint(body, color: TrailTheme.splatoon.colors[newest.color], in: ctx)
             ctx.restoreGState()
         }
         ctx.restoreGState()
@@ -70,58 +159,7 @@ enum TrailInk {
     static func draw(_ ctx: CGContext, color: NSColor, phase: Double, age: Double) {
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: 0)
-        let path = CGMutablePath()
-        let count = 48
-        var points: [CGPoint] = []
-        for i in 0..<count {
-            let a = Double(i) * 2 * .pi / Double(count)
-            let radius = 32 + 8 * sin(a * 5 + phase) + 5 * cos(a * 3 - phase) + 3 * sin(a * 7 + phase)
-            points.append(CGPoint(x: cos(a) * radius, y: sin(a) * radius * 0.83))
-        }
-        let first = points[0], last = points[count - 1]
-        path.move(to: CGPoint(x: (first.x + last.x) / 2, y: (first.y + last.y) / 2))
-        for i in 0..<count {
-            let next = points[(i + 1) % count]
-            path.addQuadCurve(to: CGPoint(x: (points[i].x + next.x) / 2, y: (points[i].y + next.y) / 2), control: points[i])
-        }
-        path.closeSubpath()
-        // A minority of splats grow a narrow hanging drip. Keep all geometry inside ±64.
-        if phase < 2.1 {
-            let length = min(27, max(0, age - 0.12) * 23)
-            let x = 8 * sin(phase * 3)
-            path.move(to: CGPoint(x: x - 5, y: -15))
-            path.addCurve(to: CGPoint(x: x - 3.5, y: -27 - length),
-                          control1: CGPoint(x: x - 2, y: -23), control2: CGPoint(x: x - 2, y: -23 - length))
-            path.addCurve(to: CGPoint(x: x + 3.5, y: -27 - length),
-                          control1: CGPoint(x: x - 6, y: -35 - length), control2: CGPoint(x: x + 6, y: -35 - length))
-            path.addCurve(to: CGPoint(x: x + 5, y: -15),
-                          control1: CGPoint(x: x + 2, y: -23 - length), control2: CGPoint(x: x + 2, y: -23))
-            path.closeSubpath()
-        }
-        for i in 0..<3 {
-            let a = phase + Double(i) * 2.1
-            let radius = 47.0 + Double(i) * 2
-            let size = 3.5 + Double(i) * 1.1
-            path.addEllipse(in: CGRect(x: cos(a) * radius - size / 2, y: sin(a) * radius * 0.8 - size / 2, width: size, height: size))
-        }
-        ctx.saveGState()
-        ctx.addPath(path)
-        ctx.clip()
-        let dark = color.blended(withFraction: 0.27, of: .black)!
-        let light = color.blended(withFraction: 0.18, of: .white)!
-        let gradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(), colors: [light.cgColor, color.cgColor, dark.cgColor] as CFArray, locations: [0, 0.5, 1])!
-        ctx.drawLinearGradient(gradient, start: CGPoint(x: -14, y: 40), end: CGPoint(x: 14, y: -58), options: [.drawsBeforeStartLocation, .drawsAfterEndLocation])
-        ctx.setLineCap(.round)
-        ctx.setLineWidth(3.2)
-        ctx.setStrokeColor(NSColor.white.withAlphaComponent(0.76).cgColor)
-        ctx.move(to: CGPoint(x: -23, y: 12))
-        ctx.addCurve(to: CGPoint(x: -5, y: 23), control1: CGPoint(x: -22, y: 21), control2: CGPoint(x: -14, y: 25))
-        ctx.strokePath()
-        ctx.setFillColor(NSColor.white.withAlphaComponent(0.86).cgColor)
-        ctx.fillEllipse(in: CGRect(x: 8, y: 19, width: 5, height: 3))
-        ctx.setFillColor(light.withAlphaComponent(0.6).cgColor)
-        ctx.fillEllipse(in: CGRect(x: 3, y: -19, width: 18, height: 5))
-        ctx.restoreGState()
+        paint(impact(center: .zero, radius: 35, seed: phase, age: age), color: color, in: ctx)
         ctx.restoreGState()
     }
 }
@@ -147,4 +185,23 @@ func renderInkFixture(to path: String) throws {
         painter.draw(system.particles, in: ctx, at: 1.7, twinkleSpeed: 1.8)
     }
     try NSBitmapImageRep(cgImage: ctx.makeImage()!).representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: path))
+}
+
+func runInkRenderingTests() {
+    let bitmap = CGContext(data: nil, width: 1200, height: 720, bitsPerComponent: 8, bytesPerRow: 0,
+                           space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let settings = TrailSettings(persistent: false), system = ParticleSystem()
+    settings.theme = .splatoon; settings.size = 42; settings.lifetime = 2.5
+    for frame in 0...140 {
+        let t = Double(frame) / 60
+        system.tick(at: t, cursor: CGPoint(x: 70 + Double(frame) * 7.4, y: 360 + sin(Double(frame) / 15) * 280), settings: settings)
+    }
+    let begin = CFAbsoluteTimeGetCurrent()
+    for frame in 0..<8 {
+        bitmap.clear(CGRect(x: 0, y: 0, width: 1200, height: 720))
+        TrailInk.drawTrail(system.particles, in: bitmap, origin: .zero, at: 2.35 + Double(frame) / 60)
+    }
+    let milliseconds = (CFAbsoluteTimeGetCurrent() - begin) * 1000 / 8
+    precondition(system.bounds.contains(CGPoint(x: system.particles.last!.x, y: system.particles.last!.y)))
+    print(String(format: "PASS: large ink surface render, average %.2f ms/frame (offscreen 1200x720)", milliseconds))
 }
