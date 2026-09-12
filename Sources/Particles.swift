@@ -213,17 +213,20 @@ final class ParticleSystem {
     private var seed: UInt64 = 0x57A41234
     private var inkDistance = 0.0
     private var inkColor = -1
-    private var inkDeadline = 0.0
-    private var inkEmissions = 0
-    private var inkQuota = 36
+    private var inkLastMovement: Double?
+    private var inkMovementsRemaining = 0
     let limit = 240
-    private func prepareInk(at time: Double) {
-        guard inkColor < 0 || time >= inkDeadline || inkEmissions >= inkQuota else { return }
-        let count = TrailTheme.splatoon.colors.count
-        inkColor = inkColor < 0 ? Int(random() * Double(count)) : (inkColor + 1 + Int(random() * Double(count - 1))) % count
-        inkDeadline = time + 1.6 + random() * 1.2
-        inkQuota = 30 + Int(random() * 19)
-        inkEmissions = 0
+    private func prepareInk(at time: Double, moving: Bool = false) {
+        // Brief pauses inside a gesture do not split it. Change only on the next movement.
+        if moving, let last = inkLastMovement, time - last >= 0.35 {
+            inkMovementsRemaining -= 1
+        }
+        if inkColor < 0 || (moving && inkMovementsRemaining <= 0) {
+            let count = TrailTheme.splatoon.colors.count
+            inkColor = inkColor < 0 ? Int(random() * Double(count)) : (inkColor + 1 + Int(random() * Double(count - 1))) % count
+            inkMovementsRemaining = random() < 0.5 ? 1 : 2
+        }
+        if moving { inkLastMovement = time }
     }
     func random() -> Double {
         seed = seed &* 6364136223846793005 &+ 1442695040888963407
@@ -232,7 +235,7 @@ final class ParticleSystem {
     func reset() {
         particles.removeAll(keepingCapacity: true); previous = nil; lastTime = nil
         distanceRemainder = 0; emissionBudget = 0
-        inkColor = -1; inkDeadline = 0; inkEmissions = 0; inkDistance = 0
+        inkColor = -1; inkLastMovement = nil; inkMovementsRemaining = 0; inkDistance = 0
         rainbowAngle = nil; rainbowTangent = nil
     }
     func tick(at time: Double, cursor: CGPoint?, settings: TrailSettings) {
@@ -302,8 +305,7 @@ final class ParticleSystem {
         }
         if settings.theme == .splatoon {
             guard distance > 0.2 else { previous = start; return }
-            prepareInk(at: time)
-            inkEmissions += Int(time * 8) != Int((time - dt) * 8) ? 1 : 0
+            prepareInk(at: time, moving: true)
             // Store the exact previous endpoint, independent of density or pointer speed.
             particles.append(Particle(x: Double(cursor.x), y: Double(cursor.y), vx: 0, vy: 0,
                 born: time, life: settings.lifetime, size: settings.size * 1.5,
@@ -351,7 +353,7 @@ final class ParticleSystem {
         distanceRemainder = total.truncatingRemainder(dividingBy: spacing)
         guard count > 0 else { return }
         emissionBudget -= Double(count)
-        prepareInk(at: time)
+        prepareInk(at: time, moving: true)
         for i in 0..<count {
             let t = (Double(i) + random()) / Double(count)
             spawn(x: Double(start.x) + dx * t, y: Double(start.y) + dy * t,
@@ -369,7 +371,6 @@ final class ParticleSystem {
         let theme = s.theme == .mixed ? choices[Int(random() * Double(choices.count))] : s.theme
         let direction = random() * 2 * .pi
         if theme == .splatoon {
-            inkEmissions += 1
             let radius = burst ? random() * s.size * 1.4 : random() * s.size * 0.24
             particles.append(Particle(x: x + cos(direction) * radius, y: y + sin(direction) * radius, vx: 0, vy: 0,
                 born: time, life: s.lifetime * (0.95 + random() * 0.3),
@@ -708,10 +709,40 @@ func runParticleTests() {
     inkSystem.tick(at: 0.2, cursor: nil, settings: inkSettings)
     precondition(inkSystem.particles[0].x == firstInk.x && inkSystem.particles[0].y == firstInk.y, "Ink bodies stay fixed while edge drips grow")
     inkSystem.burst(at: .zero, time: 3, settings: inkSettings)
-    precondition(inkSystem.particles.last!.color != firstInk.color, "Timed switch must choose a different ink")
-    let timedColor = inkSystem.particles.last!.color
-    for _ in 0..<5 { inkSystem.burst(at: .zero, time: 3, settings: inkSettings) }
-    precondition(inkSystem.particles.last!.color != timedColor, "Repeated sprays must also change ink color")
+    precondition(inkSystem.particles.last!.color == firstInk.color, "Idle time and clicks must not trigger a color switch")
+    let gestures = ParticleSystem()
+    var gestureTime = 0.0
+    var gestureX = 0.0
+    var colors: [Int] = []
+    gestures.tick(at: 0, cursor: .zero, settings: inkSettings)
+    for gesture in 0..<10 {
+        var gestureColor: Int?
+        // Ten seconds of continuous motion must never trigger a mid-gesture color change.
+        for frame in 0..<600 {
+            gestureTime += 1.0 / 60; gestureX += 2
+            gestures.tick(at: gestureTime, cursor: CGPoint(x: gestureX, y: 0), settings: inkSettings)
+            let color = gestures.particles.last!.color
+            if gestureColor == nil { gestureColor = color }
+            precondition(color == gestureColor, "An entire movement must retain one ink color")
+            if frame == 200 {
+                // A short hesitation and a click belong to the same movement.
+                gestureTime += 0.15
+                gestures.tick(at: gestureTime, cursor: CGPoint(x: gestureX, y: 0), settings: inkSettings)
+                gestures.burst(at: CGPoint(x: gestureX, y: 0), time: gestureTime, settings: inkSettings)
+                precondition(gestures.particles.last!.color == gestureColor, "Clicking during motion keeps the gesture color")
+            }
+        }
+        colors.append(gestureColor!)
+        for _ in 0..<30 {
+            gestureTime += 1.0 / 60
+            gestures.tick(at: gestureTime, cursor: CGPoint(x: gestureX, y: 0), settings: inkSettings)
+        }
+        if gesture >= 2 {
+            precondition(!(colors[gesture] == colors[gesture - 1] && colors[gesture] == colors[gesture - 2]),
+                         "A color lasts at most two completed movements")
+        }
+    }
+    precondition(zip(colors, colors.dropFirst()).contains { $0 == $1 }, "Some colors should last two movements")
     for i in 0..<100 { inkSystem.burst(at: .zero, time: Double(i), settings: inkSettings) }
     precondition(inkSystem.particles.count <= inkSystem.limit, "Ink remains bounded")
     inkSystem.reset()
@@ -736,7 +767,7 @@ func runParticleTests() {
     inkSystem.tick(at: 0.1, cursor: CGPoint(x: 1400, y: 40), settings: inkSettings)
     precondition(inkSystem.particles.count == inkCount, "Pointer teleports must not connect ink across screens")
     runInkRenderingTests()
-    print("PASS: ink batch colors, timed and count switches, anchored splats, bounded memory")
+    print("PASS: ink gesture colors, brief pauses, clicks, anchored splats, bounded memory")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
     }
