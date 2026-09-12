@@ -56,28 +56,50 @@ enum TrailInk {
 
     /// Lighting is derived from the merged mask, so there are no bead outlines or tube highlights.
     static func paint(_ shape: CGPath, color: NSColor, in ctx: CGContext) {
-        let bounds = shape.boundingBoxOfPath.insetBy(dx: -3, dy: -3).integral
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        let scale = min(2, min(1400 / max(bounds.width, bounds.height), sqrt(260_000 / (bounds.width * bounds.height))))
-        let width = max(1, Int(ceil(bounds.width * scale))), height = max(1, Int(ceil(bounds.height * scale)))
-        guard let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
-                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
-              let data = bitmap.data else { return }
-        bitmap.scaleBy(x: scale, y: scale)
-        bitmap.translateBy(x: -bounds.minX, y: -bounds.minY)
-        bitmap.setFillColor(NSColor.white.cgColor)
-        // Fill contours independently: mixed path winding must never punch holes at overlaps.
+        var contours: [(CGPath, CGRect)] = []
+        var contour = CGMutablePath()
         shape.applyWithBlock { pointer in
             let element = pointer.pointee
             switch element.type {
-            case .moveToPoint: bitmap.move(to: element.points[0])
-            case .addLineToPoint: bitmap.addLine(to: element.points[0])
-            case .addQuadCurveToPoint: bitmap.addQuadCurve(to: element.points[1], control: element.points[0])
-            case .addCurveToPoint: bitmap.addCurve(to: element.points[2], control1: element.points[0], control2: element.points[1])
-            case .closeSubpath: bitmap.closePath(); bitmap.fillPath()
+            case .moveToPoint: contour.move(to: element.points[0])
+            case .addLineToPoint: contour.addLine(to: element.points[0])
+            case .addQuadCurveToPoint: contour.addQuadCurve(to: element.points[1], control: element.points[0])
+            case .addCurveToPoint: contour.addCurve(to: element.points[2], control1: element.points[0], control2: element.points[1])
+            case .closeSubpath:
+                contour.closeSubpath()
+                contours.append((contour, contour.boundingBoxOfPath))
+                contour = CGMutablePath()
             @unknown default: break
             }
         }
+        let extent = shape.boundingBoxOfPath.insetBy(dx: -3, dy: -3).intersection(ctx.boundingBoxOfClipPath)
+        guard !extent.isNull, !extent.isEmpty else { return }
+        // Fixed world-space tiles keep resolution, pixel phase and texture origin stable.
+        // Padding supplies neighboring alpha for normals without exposing tile seams.
+        let tileSize = 128.0
+        for row in Int(floor(extent.minY / tileSize))...Int(floor(extent.maxY / tileSize)) {
+            for column in Int(floor(extent.minX / tileSize))...Int(floor(extent.maxX / tileSize)) {
+                let tile = CGRect(x: Double(column) * tileSize, y: Double(row) * tileSize, width: tileSize, height: tileSize)
+                let bounds = tile.insetBy(dx: -3, dy: -3)
+                let visible = contours.filter { $0.1.intersects(bounds) }
+                guard !visible.isEmpty else { continue }
+                ctx.saveGState()
+                ctx.clip(to: tile)
+                paintTile(visible.map { $0.0 }, bounds: bounds, color: color, in: ctx)
+                ctx.restoreGState()
+            }
+        }
+    }
+
+    private static func paintTile(_ contours: [CGPath], bounds: CGRect, color: NSColor, in ctx: CGContext) {
+        let scale = 1.0
+        let width = Int(bounds.width), height = Int(bounds.height)
+        guard let bitmap = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: width * 4,
+                                     space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
+              let data = bitmap.data else { return }
+        bitmap.translateBy(x: -bounds.minX, y: -bounds.minY)
+        bitmap.setFillColor(NSColor.white.cgColor)
+        for contour in contours { bitmap.addPath(contour); bitmap.fillPath() }
         let pixels = data.assumingMemoryBound(to: UInt8.self)
         let rgb = color.usingColorSpace(.deviceRGB)!
         let base = [Double(rgb.redComponent), Double(rgb.greenComponent), Double(rgb.blueComponent)]
@@ -94,7 +116,7 @@ enum TrailInk {
                 }
                 let edge = (coverage(-step, 0) - coverage(step, 0)) * 0.12
                     + (coverage(0, -step) - coverage(0, step)) * 0.2
-                let px = bounds.minX + Double(x) / scale, py = bounds.minY + Double(y) / scale
+                let px = bounds.minX + Double(x) + 0.5, py = bounds.maxY - Double(y) - 0.5
                 // Low-contrast uneven wet surface, anchored to wall coordinates rather than each shot.
                 let surfaceX = ((Int(floor(px)) % 128) + 128) % 128
                 let surfaceY = ((Int(floor(py)) % 128) + 128) % 128
@@ -190,6 +212,35 @@ func renderInkFixture(to path: String) throws {
 func runInkRenderingTests() {
     let bitmap = CGContext(data: nil, width: 1200, height: 720, bitsPerComponent: 8, bytesPerRow: 0,
                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let reference = CGContext(data: nil, width: 1200, height: 720, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    let original = CGMutablePath()
+    original.addRect(CGRect(x: 70, y: 60, width: 460, height: 350))
+    let expanded = CGMutablePath()
+    expanded.addRect(CGRect(x: 12, y: 8, width: 1120, height: 690))
+    TrailInk.paint(original, color: TrailTheme.splatoon.colors[0], in: reference)
+    TrailInk.paint(expanded, color: TrailTheme.splatoon.colors[0], in: bitmap)
+    let stablePixels = reference.data!.assumingMemoryBound(to: UInt8.self)
+    let expandedPixels = bitmap.data!.assumingMemoryBound(to: UInt8.self)
+    // Compare every covered interior pixel, including both sides of tile boundaries.
+    var compared = 0
+    for y in 0..<720 {
+        for x in 0..<1200 {
+            let offset = y * reference.bytesPerRow + x * 4
+            if stablePixels[offset + 3] == 255 && x > 76 && x < 523 {
+                let above = max(0, y - 5) * reference.bytesPerRow + x * 4 + 3
+                let below = min(719, y + 5) * reference.bytesPerRow + x * 4 + 3
+                if stablePixels[above] == 255 && stablePixels[below] == 255 {
+                    for channel in 0..<4 {
+                        precondition(stablePixels[offset + channel] == expandedPixels[offset + channel], "Ink highlights must stay fixed as bounds grow or shrink")
+                    }
+                    compared += 1
+                }
+            }
+        }
+    }
+    precondition(compared > 100_000, "Stability check must cover a substantial shared ink area")
+    print("PASS: fixed ink highlights across changing bounds and tile boundaries")
     let settings = TrailSettings(persistent: false), system = ParticleSystem()
     settings.theme = .splatoon; settings.size = 42; settings.lifetime = 2.5
     for frame in 0...140 {
