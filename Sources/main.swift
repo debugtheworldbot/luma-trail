@@ -31,6 +31,54 @@ final class Surface: NSView {
     override func draw(_ dirtyRect: NSRect) { NSColor(hex: 0xF9F6F2).setFill(); bounds.fill() }
 }
 
+final class AquaWindowButton: NSButton {
+    let tint: NSColor
+    init(tint: NSColor, title: String, target: AnyObject?, action: Selector?) {
+        self.tint = tint
+        super.init(frame: .zero)
+        self.title = ""; self.target = target; self.action = action
+        isBordered = false; setAccessibilityLabel(title); toolTip = title
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func draw(_ dirtyRect: NSRect) {
+        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 4, dy: 4))
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow(); shadow.shadowColor = .black.withAlphaComponent(0.3)
+        shadow.shadowBlurRadius = 1; shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set(); tint.setFill(); circle.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        let top = tint.blended(withFraction: isHighlighted ? 0.15 : 0.5, of: .black)!
+        let bottom = tint.blended(withFraction: 0.5, of: .white)!
+        NSGradient(colors: [bottom, tint, top])?.draw(in: circle, angle: 90)
+        tint.blended(withFraction: 0.45, of: .black)!.setStroke()
+        circle.lineWidth = 1; circle.stroke()
+        let gleam = NSBezierPath(ovalIn: NSRect(x: bounds.midX - 5, y: bounds.midY + 1, width: 10, height: 6))
+        NSGradient(starting: .white.withAlphaComponent(0.05), ending: .white.withAlphaComponent(0.95))?.draw(in: gleam, angle: 90)
+        let reflection = NSBezierPath(ovalIn: NSRect(x: bounds.midX - 4, y: bounds.midY - 6, width: 8, height: 3))
+        NSColor.white.withAlphaComponent(0.35).setFill(); reflection.fill()
+    }
+}
+
+final class AquaTitlebar: NSView {
+    override func draw(_ dirtyRect: NSRect) {
+        NSGradient(colors: [NSColor(hex: 0xBEB9BE), NSColor(hex: 0xE1DDE0), NSColor(hex: 0xFAF8F9)])?.draw(in: bounds, angle: 90)
+        NSColor.white.withAlphaComponent(0.9).setFill()
+        NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+        NSColor(hex: 0x9A9299).setFill()
+        NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
+        let text = "Luma Trail" as NSString
+        let shadow = NSShadow(); shadow.shadowColor = .white.withAlphaComponent(0.9)
+        shadow.shadowOffset = NSSize(width: 0, height: -1)
+        let attributes: [NSAttributedString.Key: Any] = [
+            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
+            .foregroundColor: NSColor(hex: 0x39343D), .shadow: shadow
+        ]
+        let size = text.size(withAttributes: attributes)
+        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attributes)
+    }
+    override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
+}
+
 final class ThemeBoard: NSView {
     override var isFlipped: Bool { true }
 }
@@ -343,11 +391,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func buildWindow() {
-        settingsWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 650), styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
+        settingsWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 690), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         settingsWindow.title = "Luma Trail"; settingsWindow.isReleasedWhenClosed = false
+        settingsWindow.titleVisibility = .hidden
         settingsWindow.titlebarAppearsTransparent = true; settingsWindow.backgroundColor = NSColor(hex: 0xF9F6F2)
         settingsWindow.appearance = NSAppearance(named: .aqua); settingsWindow.center()
-        let root = Surface(frame: NSRect(x: 0, y: 0, width: 820, height: 650)); settingsWindow.contentView = root
+        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            settingsWindow.standardWindowButton(kind)?.isHidden = true
+        }
+        let content = Surface(frame: NSRect(x: 0, y: 0, width: 820, height: 690))
+        settingsWindow.contentView = content
+        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 820, height: 40))
+        content.addSubview(header)
+        let controls: [(Int, String, Selector?)] = [
+            (0xE85B52, "关闭", #selector(NSWindow.performClose(_:))),
+            (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:))),
+            (0x68B751, "缩放（此窗口为固定尺寸）", nil)
+        ]
+        for (index, control) in controls.enumerated() {
+            let button = AquaWindowButton(tint: NSColor(hex: control.0), title: control.1, target: settingsWindow, action: control.2)
+            button.frame = NSRect(x: 13 + CGFloat(index) * 28, y: 7, width: 26, height: 26)
+            button.isEnabled = control.2 != nil
+            header.addSubview(button)
+        }
+        let root = Surface(frame: NSRect(x: 0, y: 40, width: 820, height: 650)); content.addSubview(root)
         func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = NSRect(x: x, y: y, width: w, height: h); root.addSubview(view) }
         put(label("Luma Trail", 30, .semibold), 28, 17, 400, 42)
         put(label("给每一次移动，添一点小小的魔法。", 13, .regular, NSColor(hex: 0x8B7F90)), 29, 65, 430, 21)
