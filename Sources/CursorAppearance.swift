@@ -127,7 +127,7 @@ final class CursorCanvas: NSView {
         return CGRect(x: (bounds.width - size.width * scale) / 2, y: (bounds.height - size.height * scale) / 2, width: size.width * scale, height: size.height * scale)
     }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(hex: 0xE9E3EC).setFill(); bounds.fill()
+        NSColor(hex: 0xD8E1E8).setFill(); bounds.fill()
         for x in stride(from: 0, to: Int(bounds.width), by: 14) { for y in stride(from: 0, to: Int(bounds.height), by: 14) where (x/14+y/14)%2 == 0 { NSColor.white.withAlphaComponent(0.5).setFill(); NSRect(x:x,y:y,width:14,height:14).fill() } }
         cursorImage?.draw(in: imageRect, from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
         let p = CGPoint(x: imageRect.minX + hotspot.x * imageRect.width, y: imageRect.minY + hotspot.y * imageRect.height)
@@ -159,11 +159,22 @@ final class CursorWindowController: NSObject {
         refresh(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
     }
     func build() {
-        window = NSWindow(contentRect:NSRect(x:0,y:0,width:690,height:590),styleMask:[.titled,.closable,.miniaturizable],backing:.buffered,defer:false)
+        window = NSWindow(contentRect:NSRect(x:0,y:0,width:690,height:630),styleMask:[.titled,.closable,.miniaturizable,.fullSizeContentView],backing:.buffered,defer:false)
+        window.appearance = NSAppearance(named: .aqua)
         window.title = "鼠标外观 · Luma Trail"; window.isReleasedWhenClosed = false; window.center()
-        let surface = Surface(frame:NSRect(x:0,y:0,width:690,height:590)); window.contentView = surface
+        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
+        let content = Surface(frame: NSRect(x: 0, y: 0, width: 690, height: 630)); window.contentView = content
+        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 690, height: 40)); content.addSubview(header)
+        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = true }
+        for (index, item) in [(0xE85B52, "关闭", #selector(NSWindow.performClose(_:))), (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:)))].enumerated() {
+            let button = AquaWindowButton(tint: NSColor(hex: item.0), title: item.1, target: window, action: item.2)
+            button.frame = NSRect(x: 13 + CGFloat(index) * 28, y: 7, width: 26, height: 26); header.addSubview(button)
+        }
+        let surface = Surface(frame:NSRect(x:0,y:40,width:690,height:590)); content.addSubview(surface)
         func put(_ v:NSView,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat,_ h:CGFloat) { v.frame = NSRect(x:x,y:y,width:w,height:h); surface.addSubview(v) }
         func button(_ title:String,_ action:Selector,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat) { let b = NSButton(title:title,target:self,action:action); b.bezelStyle = .rounded; put(b,x,y,w,30) }
+        put(AquaGroup(), 18, 98, 270, 373)
+        put(AquaGroup(), 302, 98, 371, 373)
         put(label("让鼠标也有自己的风格",23,.semibold),28,24,600,32)
         put(label("为每种状态选择图片，或给系统鼠标换个颜色。",12),28,65,610,24)
         picker = NSPopUpButton(); picker.addItems(withTitles:CursorKind.all.map(\.title)); picker.target = self; picker.action = #selector(selectionChanged); put(picker,28,109,250,32)
@@ -175,7 +186,7 @@ final class CursorWindowController: NSObject {
         button("清除当前状态设置",#selector(clearResource),314,150,220)
         put(label("支持透明 PNG、JPEG、TIFF，单张 ≤ 10 MB。",11),314,190,350,20)
         put(label("未设置的保持原样；系统彩色等待球暂不支持。",11),314,213,350,20)
-        tint = NSButton(checkboxWithTitle:"统一染色（关闭则保留图片原色）",target:self,action:#selector(colorChanged)); put(tint,314,259,350,25)
+        tint = NSButton(checkboxWithTitle:"统一染色（关闭则保留图片原色）",target:self,action:#selector(colorChanged)); tint.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox"); put(tint,314,259,350,25)
         color = NSColorWell(); color.target = self; color.action = #selector(colorChanged); put(color,316,299,60,32)
         put(label("鼠标颜色",12),391,305,130,22)
         put(label("当前状态大小",12),314,357,150,22)
@@ -184,6 +195,7 @@ final class CursorWindowController: NSObject {
         status = label("修改后点击应用。退出应用时自动恢复原鼠标。",11); status.maximumNumberOfLines = 3; put(status,28,475,632,48)
         button("恢复原鼠标",#selector(restore),28,538,150)
         button("应用鼠标外观",#selector(apply),483,538,178)
+        AquaStyle.install(in: surface)
     }
     func refresh() {
         let a = manager.asset(for:selected)

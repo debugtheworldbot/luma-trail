@@ -10,7 +10,7 @@ xcrun clang -target arm64-apple-macosx13.0 -fobjc-arc -fmodules -fmodules-cache-
 xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
   -target arm64-apple-macosx13.0 -framework AppKit -framework Carbon \
   -import-objc-header Sources/CursorBridge.h "$STAGING/CursorBridge.o" \
-  Sources/CursorAppearance.swift Sources/TrailNature.swift Sources/TrailGlow.swift \
+  Sources/AquaStyle.swift Sources/CursorAppearance.swift Sources/TrailNature.swift Sources/TrailGlow.swift \
   Sources/TrailFestive.swift Sources/TrailInk.swift Sources/TrailPaths.swift Sources/Particles.swift Sources/main.swift \
   -o "$APP/Contents/MacOS/LumaTrail"
 cp Info.plist "$APP/Contents/Info.plist"
