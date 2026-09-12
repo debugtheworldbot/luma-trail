@@ -2,6 +2,71 @@ import AppKit
 
 /// Opaque, rounded paint with local specular reflections; no glitter or outer glow.
 enum TrailInk {
+    static func drawTrail(_ particles: [Particle], in ctx: CGContext, origin: CGPoint, at time: Double) {
+        var runs: [[Particle]] = []
+        for p in particles where p.theme == .splatoon && p.trailStart != nil {
+            if let last = runs.last?.last, last.color == p.color,
+               p.trailStart == CGPoint(x: last.x, y: last.y) {
+                runs[runs.count - 1].append(p)
+            } else {
+                runs.append([p])
+            }
+        }
+        ctx.saveGState()
+        ctx.translateBy(x: -origin.x, y: -origin.y)
+        ctx.setLineCap(.round)
+        ctx.setLineJoin(.round)
+        for run in runs {
+            guard let newest = run.last else { continue }
+            let body = CGMutablePath(), sheen = CGMutablePath(), shade = CGMutablePath()
+            for (index, p) in run.enumerated() {
+                guard let start = p.trailStart else { continue }
+                let end = CGPoint(x: p.x, y: p.y)
+                let age = max(0, time - p.born)
+                let width = p.size * (0.94 + 0.07 * sin(p.phase) + 0.035 * sin(p.phase * 2.7))
+                let line = CGMutablePath()
+                line.move(to: start); line.addLine(to: end)
+                body.addPath(line.copy(strokingWithWidth: width, lineCap: .round, lineJoin: .round, miterLimit: 1))
+                let shine = CGMutablePath()
+                shine.move(to: CGPoint(x: start.x, y: start.y + width * 0.23))
+                shine.addLine(to: CGPoint(x: end.x, y: end.y + width * 0.23))
+                sheen.addPath(shine.copy(strokingWithWidth: width * 0.12, lineCap: .round, lineJoin: .round, miterLimit: 1))
+                let lowerEdge = CGMutablePath()
+                lowerEdge.move(to: CGPoint(x: start.x, y: start.y - width * 0.3))
+                lowerEdge.addLine(to: CGPoint(x: end.x, y: end.y - width * 0.3))
+                shade.addPath(lowerEdge.copy(strokingWithWidth: width * 0.17, lineCap: .round, lineJoin: .round, miterLimit: 1))
+                // Sparse edge details stay attached to a continuous body, including during fast moves.
+                if Int(p.born * 5) != Int((p.trailBornStart ?? p.born) * 5), sin(p.phase * 7) > -0.3 {
+                    let length = min(p.size * 0.65, max(0, age - 0.15) * (11 + 5 * sin(p.phase * 3)))
+                    let drip = CGMutablePath()
+                    drip.move(to: end)
+                    drip.addQuadCurve(to: CGPoint(x: p.x + 1, y: p.y - width * 0.48 - length),
+                                      control: CGPoint(x: p.x - 2, y: p.y - width * 0.4))
+                    body.addPath(drip.copy(strokingWithWidth: max(1.5, width * 0.11), lineCap: .round, lineJoin: .round, miterLimit: 1))
+                    if index % 3 == 0 {
+                        body.addEllipse(in: CGRect(x: p.x + width * 0.25, y: p.y + width * 0.68, width: 2, height: 2))
+                    }
+                }
+            }
+            let color = TrailTheme.splatoon.colors[newest.color]
+            let progress = max(0, min(1, (time - newest.born) / newest.life))
+            // Composite each connected color as one surface, so overlapping samples have no seams.
+            ctx.saveGState()
+            ctx.setAlpha(newest.alpha * (1 - pow(progress, 4)))
+            ctx.beginTransparencyLayer(auxiliaryInfo: nil)
+            ctx.setFillColor(color.cgColor)
+            ctx.addPath(body); ctx.fillPath()
+            ctx.addPath(body); ctx.clip()
+            ctx.setFillColor(NSColor.black.withAlphaComponent(0.12).cgColor)
+            ctx.addPath(shade); ctx.fillPath()
+            ctx.setFillColor(NSColor.white.withAlphaComponent(0.3).cgColor)
+            ctx.addPath(sheen); ctx.fillPath()
+            ctx.endTransparencyLayer()
+            ctx.restoreGState()
+        }
+        ctx.restoreGState()
+    }
+
     static func draw(_ ctx: CGContext, color: NSColor, phase: Double, age: Double) {
         ctx.saveGState()
         ctx.setShadow(offset: .zero, blur: 0)

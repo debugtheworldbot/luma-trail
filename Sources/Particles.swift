@@ -299,6 +299,18 @@ final class ParticleSystem {
             distanceRemainder = 0; emissionBudget = 0; rainbowTangent = nil
             return
         }
+        if settings.theme == .splatoon {
+            guard distance > 0.2 else { previous = start; return }
+            prepareInk(at: time)
+            inkEmissions += Int(time * 8) != Int((time - dt) * 8) ? 1 : 0
+            // Store the exact previous endpoint, independent of density or pointer speed.
+            particles.append(Particle(x: Double(cursor.x), y: Double(cursor.y), vx: 0, vy: 0,
+                born: time, life: settings.lifetime, size: settings.size * 0.9,
+                angle: 0, spin: 0, phase: time * 5, color: inkColor, theme: .splatoon,
+                alpha: settings.opacity, trailStart: start, trailBornStart: time - dt))
+            if particles.count > limit { particles.removeFirst(particles.count - limit) }
+            return
+        }
         if settings.theme.usesRibbon {
             guard distance > 0.2 else { previous = start; return }
             let width = settings.size * (settings.theme == .comet ? 1.8 : settings.theme == .aurora ? 3.4 : 2.8)
@@ -657,6 +669,7 @@ final class ParticlePainter {
         drawComet(particles, in: ctx, origin: origin, at: time)
         drawAurora(particles, in: ctx, origin: origin, at: time)
         drawRipples(particles, in: ctx, origin: origin, at: time)
+        TrailInk.drawTrail(particles, in: ctx, origin: origin, at: time)
         for p in particles where p.trailStart == nil && p.theme != .ripples {
             let progress = max(0, min(1, (time - p.born) / p.life))
             if p.theme == .splatoon {
@@ -710,6 +723,25 @@ func runParticleTests() {
     precondition(inkSystem.particles.count <= inkSystem.limit, "Ink remains bounded")
     inkSystem.reset()
     precondition(inkSystem.particles.isEmpty, "Pause and theme changes clear ink")
+    inkSettings.size = 8; inkSettings.density = 0.25
+    for frame in 0...4 {
+        inkSystem.tick(at: Double(frame) / 60, cursor: CGPoint(x: 20 + frame * 110, y: 40), settings: inkSettings)
+    }
+    precondition(inkSystem.particles.count == 4, "Fast low-density ink must still connect every pointer sample")
+    for i in 1..<inkSystem.particles.count {
+        let previous = inkSystem.particles[i - 1]
+        precondition(inkSystem.particles[i].trailStart == CGPoint(x: previous.x, y: previous.y), "Ink endpoints must meet exactly")
+    }
+    let inkBitmap = CGContext(data: nil, width: 480, height: 80, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+    ParticlePainter().draw(inkSystem.particles, in: inkBitmap, at: 0.08, twinkleSpeed: 1)
+    let inkPixels = inkBitmap.data!.assumingMemoryBound(to: UInt8.self)
+    for x in 20...460 {
+        precondition(inkPixels[40 * inkBitmap.bytesPerRow + x * 4 + 3] > 100, "Continuous ink must not contain transparent gaps")
+    }
+    let inkCount = inkSystem.particles.count
+    inkSystem.tick(at: 0.1, cursor: CGPoint(x: 1400, y: 40), settings: inkSettings)
+    precondition(inkSystem.particles.count == inkCount, "Pointer teleports must not connect ink across screens")
     print("PASS: ink batch colors, timed and count switches, anchored splats, bounded memory")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
