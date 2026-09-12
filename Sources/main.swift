@@ -414,6 +414,8 @@ if CommandLine.arguments.contains("--self-test") {
     cursorProbe()
 } else if CommandLine.arguments.contains("--cursor-integration-test") {
     cursorIntegrationTest()
+} else if let i = CommandLine.arguments.firstIndex(of: "--render-ink"), CommandLine.arguments.count > i + 1 {
+    try renderInkFixture(to: CommandLine.arguments[i + 1])
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-rainbow"), CommandLine.arguments.count > i + 1 {
     try renderRainbowFixture(to: CommandLine.arguments[i + 1])
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-themes"), CommandLine.arguments.count > i + 1 {

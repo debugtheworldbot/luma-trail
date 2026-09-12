@@ -4,7 +4,7 @@ enum TrailTheme: Int, CaseIterable {
     // Raw values 4 and 6 are retired; preserve all remaining saved selections.
     case stardust = 0, hearts = 1, flowers = 2, custom = 3, puppy = 5, bunny = 7, rainbow = 8, butterflies = 9, bubbles = 10, clover = 11, snowflakes = 12, mixed = 13
     case sakura = 14, fireflies = 15, confetti = 16, comet = 17, maple = 18, dandelion = 19, notes = 20
-    case galaxy = 21, pixieDust = 22, aurora = 23, feathers = 24, moonStars = 25, sparkler = 26, ripples = 27
+    case galaxy = 21, pixieDust = 22, aurora = 23, feathers = 24, moonStars = 25, sparkler = 26, ripples = 27, splatoon = 28
     var title: String {
         switch self {
         case .stardust: return "仙女星尘"
@@ -32,6 +32,7 @@ enum TrailTheme: Int, CaseIterable {
         case .feathers: return "羽毛轻飘"
         case .moonStars: return "月牙星语"
         case .sparkler: return "暖光火花"
+        case .splatoon: return "Splatoon 喷墨"
         case .ripples: return "水波涟漪"
         }
     }
@@ -62,6 +63,7 @@ enum TrailTheme: Int, CaseIterable {
         case .feathers: return "绒羽 · 高阻力 · 慢慢翻"
         case .moonStars: return "月牙 · 小星 · 夜色粉紫"
         case .sparkler: return "短线火花 · 顺着速度"
+        case .splatoon: return "鲜亮湿墨 · 间歇换色 · 细滴下坠"
         case .ripples: return "淡环扩散 · 点击更明显"
         }
     }
@@ -92,13 +94,14 @@ enum TrailTheme: Int, CaseIterable {
         case .feathers: return "fanblades"
         case .moonStars: return "moon.fill"
         case .sparkler: return "flame"
+        case .splatoon: return "drop.fill"
         case .ripples: return "circle.dotted"
         }
     }
     static var displayOrder: [TrailTheme] {
         [.stardust, .pixieDust, .sparkler, .hearts, .flowers, .sakura, .maple, .dandelion, .clover,
          .butterflies, .bubbles, .feathers, .snowflakes, .fireflies, .galaxy, .moonStars,
-         .comet, .aurora, .rainbow, .notes, .confetti, .ripples, .puppy, .bunny, .mixed, .custom]
+         .comet, .aurora, .rainbow, .notes, .confetti, .splatoon, .ripples, .puppy, .bunny, .mixed, .custom]
     }
     var colors: [NSColor] {
         switch self {
@@ -108,6 +111,7 @@ enum TrailTheme: Int, CaseIterable {
         case .puppy: return [NSColor(hex: 0xB78668), NSColor(hex: 0xC99E7D), NSColor(hex: 0xA78076)]
         case .bunny: return [NSColor(hex: 0xFFF5F4), NSColor(hex: 0xF7DBE7), NSColor(hex: 0xE9DEF9)]
         case .rainbow: return [0xFFA9BC, 0xFFD0AC, 0xFFF0AF, 0xC7E9B6, 0xAFE2EA, 0xBFC6F1, 0xDFB7ED].map { NSColor(hex: $0) }
+        case .splatoon: return [0xFF5900, 0xAD17EF, 0xC5F000, 0x087CFF, 0xF51C96, 0x00CBA0].map { NSColor(hex: $0) }
         case .custom, .mixed: return [.white]
         case .butterflies: return [0xA1D98F, 0xE9AED3, 0xC4B3ED].map { NSColor(hex: $0) }
         case .bubbles: return [0xA6D8BE, 0xEFB5D0, 0xACCFEF].map { NSColor(hex: $0) }
@@ -207,7 +211,19 @@ final class ParticleSystem {
     private var rainbowAngle: Double?
     private var rainbowTangent: CGPoint?
     private var seed: UInt64 = 0x57A41234
+    private var inkColor = -1
+    private var inkDeadline = 0.0
+    private var inkEmissions = 0
+    private var inkQuota = 36
     let limit = 240
+    private func prepareInk(at time: Double) {
+        guard inkColor < 0 || time >= inkDeadline || inkEmissions >= inkQuota else { return }
+        let count = TrailTheme.splatoon.colors.count
+        inkColor = inkColor < 0 ? Int(random() * Double(count)) : (inkColor + 1 + Int(random() * Double(count - 1))) % count
+        inkDeadline = time + 1.6 + random() * 1.2
+        inkQuota = 30 + Int(random() * 19)
+        inkEmissions = 0
+    }
     func random() -> Double {
         seed = seed &* 6364136223846793005 &+ 1442695040888963407
         return Double(seed >> 11) / 9_007_199_254_740_992.0
@@ -215,6 +231,7 @@ final class ParticleSystem {
     func reset() {
         particles.removeAll(keepingCapacity: true); previous = nil; lastTime = nil
         distanceRemainder = 0; emissionBudget = 0
+        inkColor = -1; inkDeadline = 0; inkEmissions = 0
         rainbowAngle = nil; rainbowTangent = nil
     }
     func tick(at time: Double, cursor: CGPoint?, settings: TrailSettings) {
@@ -225,6 +242,7 @@ final class ParticleSystem {
         for i in particles.indices {
             if particles[i].trailStart != nil { continue }
             let theme = particles[i].theme
+            if theme == .splatoon { continue }
             if theme.usesOrbit {
                 particles[i].phase += particles[i].spin * dt
                 let radius = max(8, particles[i].vx)
@@ -319,6 +337,7 @@ final class ParticleSystem {
         distanceRemainder = total.truncatingRemainder(dividingBy: spacing)
         guard count > 0 else { return }
         emissionBudget -= Double(count)
+        prepareInk(at: time)
         for i in 0..<count {
             let t = (Double(i) + random()) / Double(count)
             spawn(x: Double(start.x) + dx * t, y: Double(start.y) + dy * t,
@@ -326,6 +345,7 @@ final class ParticleSystem {
         }
     }
     func burst(at point: CGPoint, time: Double, settings: TrailSettings) {
+        prepareInk(at: time)
         let count = settings.theme == .ripples ? 4 : 12
         for _ in 0..<count { spawn(x: Double(point.x), y: Double(point.y), at: time, settings: settings, burst: true) }
     }
@@ -334,7 +354,14 @@ final class ParticleSystem {
         let choices = TrailTheme.allCases.filter { $0 != .mixed && ($0 != .custom || s.customData != nil) }
         let theme = s.theme == .mixed ? choices[Int(random() * Double(choices.count))] : s.theme
         let direction = random() * 2 * .pi
-        if theme.usesOrbit {
+        if theme == .splatoon {
+            inkEmissions += 1
+            let radius = burst ? random() * s.size * 1.4 : random() * s.size * 0.24
+            particles.append(Particle(x: x + cos(direction) * radius, y: y + sin(direction) * radius, vx: 0, vy: 0,
+                born: time, life: s.lifetime * (0.95 + random() * 0.3),
+                size: s.size * (burst ? 1.0 + random() * 0.8 : 1.25 + random() * 0.65), angle: 0, spin: 0,
+                phase: random() * 2 * .pi, color: max(0, inkColor), theme: theme, alpha: s.opacity))
+        } else if theme.usesOrbit {
             particles.append(Particle(x: x, y: y, vx: 14 + random() * 32, vy: 0,
                 born: time, life: s.lifetime * (0.8 + random() * 0.5),
                 size: s.size * (0.45 + random() * 0.4), angle: 0,
@@ -387,6 +414,7 @@ final class ParticlePainter {
         ctx.setShadow(offset: .zero, blur: theme == .stardust ? 5 : 3, color: color.withAlphaComponent(0.5).cgColor)
         ctx.setFillColor(color.cgColor)
         switch theme {
+        case .splatoon: TrailInk.draw(ctx, color: color, phase: 2, age: 0.7)
         case .sakura: TrailNature.drawSakura(ctx, color: color)
         case .maple: TrailNature.drawMaple(ctx, color: color)
         case .dandelion: TrailNature.drawDandelion(ctx, color: color)
@@ -631,6 +659,16 @@ final class ParticlePainter {
         drawRipples(particles, in: ctx, origin: origin, at: time)
         for p in particles where p.trailStart == nil && p.theme != .ripples {
             let progress = max(0, min(1, (time - p.born) / p.life))
+            if p.theme == .splatoon {
+                ctx.saveGState()
+                ctx.translateBy(x: p.x - Double(origin.x), y: p.y - Double(origin.y))
+                let spread = 0.72 + 0.28 * min(1, (time - p.born) / 0.09)
+                ctx.scaleBy(x: p.size / 128 * spread, y: p.size / 128 * spread)
+                ctx.setAlpha(p.alpha * (1 - pow(progress, 4)))
+                TrailInk.draw(ctx, color: p.theme.colors[p.color], phase: p.phase, age: max(0, time - p.born))
+                ctx.restoreGState()
+                continue
+            }
             let fade = pow(1 - progress, 0.85) * min(1, (time - p.born) / 0.035)
             // Independent phases make each element shimmer instead of blinking the whole trail at once.
             let wave = (sin((time - p.born) * 2 * .pi * twinkleSpeed + p.phase) + 1) / 2
@@ -653,7 +691,26 @@ final class ParticlePainter {
 }
 
 func runParticleTests() {
-    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27], "Remaining saved theme IDs must stay stable")
+    precondition(TrailTheme.allCases.map(\.rawValue) == [0, 1, 2, 3, 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28], "Remaining saved theme IDs must stay stable")
+    let inkSettings = TrailSettings(persistent: false), inkSystem = ParticleSystem()
+    inkSettings.theme = .splatoon
+    inkSystem.burst(at: .zero, time: 0, settings: inkSettings)
+    let firstInk = inkSystem.particles[0]
+    precondition(Set(inkSystem.particles.map(\.color)).count == 1, "A click must emit one ink color")
+    inkSystem.burst(at: .zero, time: 0.1, settings: inkSettings)
+    precondition(inkSystem.particles.allSatisfy { $0.color == firstInk.color }, "Nearby batches keep the current ink")
+    inkSystem.tick(at: 0.2, cursor: nil, settings: inkSettings)
+    precondition(inkSystem.particles[0].x == firstInk.x && inkSystem.particles[0].y == firstInk.y, "Ink bodies stay fixed while edge drips grow")
+    inkSystem.burst(at: .zero, time: 3, settings: inkSettings)
+    precondition(inkSystem.particles.last!.color != firstInk.color, "Timed switch must choose a different ink")
+    let timedColor = inkSystem.particles.last!.color
+    for _ in 0..<5 { inkSystem.burst(at: .zero, time: 3, settings: inkSettings) }
+    precondition(inkSystem.particles.last!.color != timedColor, "Repeated sprays must also change ink color")
+    for i in 0..<100 { inkSystem.burst(at: .zero, time: Double(i), settings: inkSettings) }
+    precondition(inkSystem.particles.count <= inkSystem.limit, "Ink remains bounded")
+    inkSystem.reset()
+    precondition(inkSystem.particles.isEmpty, "Pause and theme changes clear ink")
+    print("PASS: ink batch colors, timed and count switches, anchored splats, bounded memory")
     for retiredID in [4, 6] {
         precondition((TrailTheme(rawValue: retiredID) ?? .stardust) == .stardust, "Retired themes must fall back to stardust")
     }
