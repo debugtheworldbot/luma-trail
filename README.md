@@ -60,3 +60,13 @@ bash build.sh
 MVP 暂不包含 GIF 动画、主题商城、登录同步、`.sparkle` 文件兼容。
 
 参考：https://sparklemou.se/ ，https://maxvanleeuwen.itch.io/sparkle-mouse
+
+### 预览稳定性回归测试
+
+构建后，在已登录的 macOS 图形会话中运行：
+
+```sh
+"dist/Luma Trail.app/Contents/MacOS/LumaTrail" --preview-stress-test
+```
+
+测试通过实际 AppKit 窗口绘制 7,200 帧，循环切换全部主题、浅色/深色背景和暂停状态，并检查提示文字。测试不保存参数、不创建桌面覆盖层、不修改系统鼠标。它覆盖了预览逐帧绘制文字时触发 CoreText 异常的历史崩溃路径；普通 `--self-test` 不覆盖窗口持续重绘。

@@ -136,14 +136,38 @@ final class PreviewView: NSView {
     let settings: TrailSettings
     let painter: ParticlePainter
     let system = ParticleSystem()
-    var light = true
+    var light = true { didSet { updateCaption(); needsDisplay = true } }
+    private let heading = NSTextField(labelWithString: "LIVE PREVIEW")
+    private let caption = NSTextField(labelWithString: "")
     var point = CGPoint.zero
     init(frame: NSRect, settings: TrailSettings, painter: ParticlePainter) {
         self.settings = settings; self.painter = painter
         super.init(frame: frame)
+        // Keep text out of the 30 Hz NSString drawing path. CoreText raised an
+        // NSInvalidArgumentException while copying its attributes on macOS 26.
+        heading.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
+        caption.font = .systemFont(ofSize: 11)
+        for field in [heading, caption] {
+            field.isSelectable = false
+            field.wantsLayer = true
+            addSubview(field)
+        }
+        updateCaption()
     }
     required init?(coder: NSCoder) { fatalError() }
+    override func layout() {
+        super.layout()
+        heading.frame = NSRect(x: 20, y: bounds.height - 32, width: max(0, bounds.width - 40), height: 16)
+        caption.frame = NSRect(x: 20, y: 14, width: max(0, bounds.width - 40), height: 18)
+    }
+    func updateCaption() {
+        let text = settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停"
+        if caption.stringValue != text { caption.stringValue = text }
+        let ink = light ? NSColor(hex: 0x34556F) : NSColor(hex: 0xC2DCEA)
+        for field in [heading, caption] where field.textColor != ink { field.textColor = ink }
+    }
     func step() {
+        updateCaption()
         let t = ProcessInfo.processInfo.systemUptime
         // A moving loop followed by a pause shows the trail fading naturally.
         let phase = min(t.truncatingRemainder(dividingBy: 5), 3.2) / 3.2 * 2 * Double.pi
@@ -174,9 +198,6 @@ final class PreviewView: NSView {
                               width: image.size.width, height: image.size.height),
                    from: .zero, operation: .sourceOver, fraction: 1,
                    respectFlipped: true, hints: nil)
-        let ink = light ? NSColor(hex: 0x34556F) : NSColor(hex: 0xC2DCEA)
-        ("LIVE PREVIEW" as NSString).draw(at: NSPoint(x: 20, y: bounds.height - 30), withAttributes: [.font: NSFont.monospacedSystemFont(ofSize: 9, weight: .medium), .foregroundColor: ink])
-        ((settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停") as NSString).draw(at: NSPoint(x: 20, y: 16), withAttributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: ink])
         NSGraphicsContext.restoreGraphicsState()
         let rim = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 9, yRadius: 9)
         NSColor(hex: 0x778997).setStroke(); rim.lineWidth = 3; rim.stroke()
@@ -339,7 +360,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             timer?.invalidate(); timer = nil; timerHz = 0; panels.forEach { $0.orderOut(nil) }
         }
         enableButton?.title = settings.enabled ? "●  桌面效果已开启" : "开启桌面效果"
-        buildStatusMenu(); preview?.needsDisplay = true
+        buildStatusMenu(); preview?.updateCaption(); preview?.needsDisplay = true
     }
     @objc func showCursorAppearance() { cursorAppearance?.show() }
     @objc func showSettings() { settingsWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
@@ -496,7 +517,40 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-if let i = CommandLine.arguments.firstIndex(of: "--render-settings"), CommandLine.arguments.count > i + 1 {
+// Exercise the real AppKit display loop, including autorelease-pool turnover.
+// Uses isolated settings and never installs overlays or changes the system cursor.
+func runPreviewStressTest() {
+    _ = NSApplication.shared
+    let settings = TrailSettings()
+    let preview = PreviewView(frame: NSRect(x: 0, y: 0, width: 486, height: 230), settings: settings, painter: ParticlePainter())
+    let window = NSWindow(contentRect: preview.bounds, styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false; window.contentView = preview
+    window.orderFrontRegardless()
+    let start = ProcessInfo.processInfo.systemUptime
+    for frame in 0..<7200 {
+        autoreleasepool {
+            if frame % 120 == 0 {
+                preview.light.toggle()
+                settings.enabled = (frame / 120) % 3 != 0
+                settings.theme = TrailTheme.displayOrder[(frame / 120) % TrailTheme.displayOrder.count]
+            }
+            preview.step()
+            preview.layoutSubtreeIfNeeded()
+            let labels = preview.subviews.compactMap { $0 as? NSTextField }
+            precondition(labels.count == 2 && labels.allSatisfy { $0.frame.height > 0 })
+            precondition(labels.last?.stringValue == (settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停"))
+            preview.display()
+            RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 240))
+        }
+        if frame % 1200 == 1199 { print("Preview stress: \(frame + 1) frames"); fflush(stdout) }
+    }
+    window.orderOut(nil)
+    print("PASS: 7200 preview frames, light/dark, pause/resume and every theme in \(Int(ProcessInfo.processInfo.systemUptime - start)) seconds")
+}
+
+if CommandLine.arguments.contains("--preview-stress-test") {
+    runPreviewStressTest()
+} else if let i = CommandLine.arguments.firstIndex(of: "--render-settings"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
     let delegate = AppDelegate(); delegate.buildWindow()
     delegate.enableButton.title = "●  桌面效果已开启"
