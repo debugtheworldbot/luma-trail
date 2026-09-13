@@ -12,7 +12,7 @@ enum AquaStyle {
         shadow.shadowBlurRadius = 2; shadow.shadowOffset = NSSize(width: 0, height: -1)
         shadow.set(); NSColor.white.setFill(); path.fill()
         NSGraphicsContext.restoreGraphicsState()
-        let colors = blue ? [0xB6EEFF, 0x439CE8, 0x176AC3, 0xD5F3FF] : [0xFFFFFF, 0xD6E0E8, 0xBAC8D3, 0xFFFFFF]
+        let colors = blue ? [0xB6EEFF, 0x439CE8, 0x176AC3, 0xD5F3FF] : [0xFFFFFF, 0xD6EEF2, 0xB2CED9, 0xFFFFFF]
         NSGradient(colors: colors.map { NSColor(hex: $0) })?.draw(in: path, angle: 90)
         if pressed { NSColor(hex: 0x174979).withAlphaComponent(0.22).setFill(); path.fill() }
         let gleam = NSBezierPath(roundedRect: NSRect(x: rect.minX + 2, y: rect.midY, width: rect.width - 4, height: rect.height / 2 - 1), xRadius: radius - 2, yRadius: radius - 2)
@@ -108,9 +108,36 @@ final class AquaPopupCell: NSPopUpButtonCell {
 final class AquaGroup: NSView {
     override func draw(_ dirtyRect: NSRect) {
         let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 9, yRadius: 9)
-        NSGradient(starting: NSColor(hex: 0xF8FAFC).withAlphaComponent(0.8), ending: NSColor(hex: 0xDFE6EC).withAlphaComponent(0.8))?.draw(in: path, angle: 90)
+        NSGradient(starting: NSColor(hex: 0xF5FDFF).withAlphaComponent(0.8), ending: NSColor(hex: 0xD9EDF0).withAlphaComponent(0.8))?.draw(in: path, angle: 90)
         NSColor(hex: 0xA1AFBC).setStroke(); path.stroke()
         let inset = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
         NSColor.white.setStroke(); inset.stroke()
+    }
+}
+
+// Procedural scenery adds an early Aero atmosphere without image assets or timers.
+enum AeroScenery {
+    static func bubble(_ rect: NSRect) {
+        let circle = NSBezierPath(ovalIn: rect)
+        NSGradient(starting: NSColor.white.withAlphaComponent(0.03), ending: NSColor.white.withAlphaComponent(0.45))?.draw(in: circle, angle: 90)
+        NSColor.white.withAlphaComponent(0.75).setStroke(); circle.lineWidth = 1; circle.stroke()
+        let shine = NSBezierPath()
+        shine.appendArc(withCenter: NSPoint(x: rect.midX, y: rect.midY), radius: rect.width * 0.39, startAngle: 55, endAngle: 135)
+        NSColor.white.withAlphaComponent(0.9).setStroke(); shine.lineWidth = 2; shine.stroke()
+    }
+
+    static func landscape(in bounds: NSRect) {
+        let w = bounds.width, h = bounds.height
+        let sun = NSRect(x: w * 0.68, y: h * 0.59, width: h * 0.7, height: h * 0.7)
+        NSGradient(starting: NSColor.white.withAlphaComponent(0.75), ending: NSColor.white.withAlphaComponent(0))?.draw(in: NSBezierPath(ovalIn: sun), relativeCenterPosition: .zero)
+        for (offset, color) in [(CGFloat(0.12), 0x9DD369), (CGFloat(0.02), 0x66B65E)] {
+            let hill = NSBezierPath(); hill.move(to: .zero)
+            hill.line(to: NSPoint(x: 0, y: h * (0.16 + offset)))
+            hill.curve(to: NSPoint(x: w, y: h * (0.13 + offset)), controlPoint1: NSPoint(x: w * 0.38, y: h * (0.52 + offset)), controlPoint2: NSPoint(x: w * 0.65, y: -h * 0.08))
+            hill.line(to: NSPoint(x: w, y: 0)); hill.close()
+            NSGradient(starting: NSColor(hex: color).withAlphaComponent(0.5), ending: NSColor(hex: 0xDDF4BB).withAlphaComponent(0.85))?.draw(in: hill, angle: 90)
+        }
+        bubble(NSRect(x: w * 0.81, y: h * 0.48, width: 37, height: 37))
+        bubble(NSRect(x: w * 0.9, y: h * 0.7, width: 18, height: 18))
     }
 }

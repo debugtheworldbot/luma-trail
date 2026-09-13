@@ -29,11 +29,21 @@ final class OverlayView: NSView {
 final class Surface: NSView {
     override var isFlipped: Bool { true }
     override func draw(_ dirtyRect: NSRect) {
-        NSColor(hex: 0xEDF1F4).setFill(); bounds.fill()
-        NSColor.white.withAlphaComponent(0.65).setFill()
+        NSGradient(colors: [NSColor(hex: 0xC7EBF7), NSColor(hex: 0xEFF9F9), NSColor(hex: 0xE3F0D6)])?.draw(in: bounds, angle: 90)
+        NSColor.white.withAlphaComponent(0.24).setFill()
         for y in stride(from: 0, to: Int(bounds.height), by: 4) {
             NSRect(x: 0, y: CGFloat(y), width: bounds.width, height: 2).fill()
         }
+        NSGraphicsContext.saveGraphicsState()
+        var transform = AffineTransform(translationByX: 0, byY: 95)
+        transform.scale(x: 1, y: -1); (transform as NSAffineTransform).concat()
+        AeroScenery.bubble(NSRect(x: bounds.width - 224, y: 23, width: 53, height: 53))
+        AeroScenery.bubble(NSRect(x: bounds.width - 157, y: 50, width: 26, height: 26))
+        let swoosh = NSBezierPath()
+        swoosh.move(to: NSPoint(x: bounds.width * 0.48, y: 4))
+        swoosh.curve(to: NSPoint(x: bounds.width, y: 72), controlPoint1: NSPoint(x: bounds.width * 0.7, y: 100), controlPoint2: NSPoint(x: bounds.width * 0.86, y: -5))
+        NSColor.white.withAlphaComponent(0.65).setStroke(); swoosh.lineWidth = 3; swoosh.stroke()
+        NSGraphicsContext.restoreGraphicsState()
     }
 }
 
@@ -126,7 +136,7 @@ final class PreviewView: NSView {
     let settings: TrailSettings
     let painter: ParticlePainter
     let system = ParticleSystem()
-    var light = false
+    var light = true
     var point = CGPoint.zero
     init(frame: NSRect, settings: TrailSettings, painter: ParticlePainter) {
         self.settings = settings; self.painter = painter
@@ -146,10 +156,11 @@ final class PreviewView: NSView {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         NSGraphicsContext.saveGraphicsState()
         NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 3), xRadius: 8, yRadius: 8).addClip()
-        let top = light ? NSColor(hex: 0xE5F4FA) : NSColor(hex: 0x264D70)
-        let bottom = light ? NSColor(hex: 0xBBCFDF) : NSColor(hex: 0x081E34)
+        let top = light ? NSColor(hex: 0x56B9EA) : NSColor(hex: 0x264D70)
+        let bottom = light ? NSColor(hex: 0xDFF5F5) : NSColor(hex: 0x081E34)
         NSGradient(starting: bottom, ending: top)?.draw(in: bounds, angle: 90)
-        (light ? NSColor.black : NSColor.white).withAlphaComponent(0.055).setFill()
+        if light { AeroScenery.landscape(in: bounds) }
+        (light ? NSColor.black : NSColor.white).withAlphaComponent(0.025).setFill()
         for x in stride(from: 18, to: Int(bounds.width), by: 24) {
             for y in stride(from: 15, to: Int(bounds.height), by: 24) { NSBezierPath(ovalIn: NSRect(x: CGFloat(x), y: CGFloat(y), width: 1.5, height: 1.5)).fill() }
         }
@@ -450,7 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         put(label("透明 PNG 最佳 · 图片只保存在本机", 10, .regular, NSColor(hex: 0x526D82)), 42, 509, 240, 20)
         preview = PreviewView(frame: .zero, settings: settings, painter: painter)
         put(preview, 306, 105, 486, 230)
-        let background = NSButton(title: "浅色背景", target: self, action: #selector(toggleBackground(_:)))
+        let background = NSButton(title: "深色背景", target: self, action: #selector(toggleBackground(_:)))
         background.bezelStyle = .rounded; background.controlSize = .small; put(background, 699, 68, 94, 25)
         let names = ["粒子大小", "闪光密度", "消散时间", "闪烁速度", "不透明度"]
         let ranges: [(Double, Double)] = [(8, 42), (0.25, 1.8), (0.4, 2.5), (0.2, 4), (0.25, 1)]
