@@ -267,7 +267,7 @@ final class PreviewView: NSView {
         let phase = min(t.truncatingRemainder(dividingBy: 5), 3.2) / 3.2 * 2 * Double.pi
         point = CGPoint(x: bounds.midX + sin(phase) * bounds.width * 0.30,
                         y: bounds.midY + sin(phase * 2) * bounds.height * 0.23)
-        system.tick(at: t, cursor: settings.enabled ? point : nil, settings: settings)
+        system.tick(at: t, cursor: point, settings: settings)
         needsDisplay = true
     }
     // Pink arrow in points, tip first, y growing downwards from the hotspot.
