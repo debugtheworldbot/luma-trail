@@ -22,12 +22,14 @@ struct FolderIconOptions: Codable, Equatable {
 }
 
 // Slots never fall back to another color or state; a missing slot means native.
-func folderSlot(_ color: FinderColor, empty: Bool, split: Bool) -> String {
-    split ? color.key + (empty ? ".empty" : ".full") : color.key
+// Folders without a colored tag use the "none" slot.
+func folderSlot(_ color: FinderColor?, empty: Bool, split: Bool) -> String {
+    let key = color?.key ?? "none"
+    return split ? key + (empty ? ".empty" : ".full") : key
 }
 func folderSlotTitle(_ slot: String) -> String {
     let parts = slot.split(separator: ".").map(String.init)
-    let color = FinderColor.allCases.first { $0.key == parts[0] }?.title ?? parts[0]
+    let color = parts[0] == "none" ? "无标签" : FinderColor.allCases.first { $0.key == parts[0] }?.title ?? parts[0]
     return parts.count == 1 ? color + "图标" : color + (parts[1] == "empty" ? " · 空文件夹图标" : " · 有内容图标")
 }
 
@@ -167,9 +169,8 @@ final class FolderIconEngine {
         if FolderInspector.hasCustomIcon(url) { return (color, nil, .keepCustom) }
         guard case .success(let children) = listing else { return (color, nil, .failed("无法读取，可能没有权限")) }
         let empty = children.isEmpty
-        guard let color else { return (nil, empty, .noTag) }
         let slot = folderSlot(color, empty: empty, split: options.splitEmpty)
-        return (color, empty, configured.contains(slot) ? .apply(slot) : .noIcon)
+        return (color, empty, configured.contains(slot) ? .apply(slot) : color == nil ? .noTag : .noIcon)
     }
     func traversable(_ url: URL, volume: NSObject?) -> Bool {
         guard let v = try? url.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey, .isPackageKey, .volumeIdentifierKey]),
@@ -353,20 +354,21 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
             add(label("有内容", 11, .medium, muted), 412, 32, 120, 16)
         }
         let configured = library.configured
-        for (row, color) in FinderColor.displayOrder.enumerated() {
-            let y = 52 + CGFloat(row) * 41
-            let dot = ColorDot(frame: .zero); dot.color = color.tint; add(dot, 14, y + 11, 14, 14)
-            add(label(color.title + "标签", 12), 34, y + 9, 76, 20)
+        let colors: [FinderColor?] = FinderColor.displayOrder + [nil]
+        for (row, color) in colors.enumerated() {
+            let y = 50 + CGFloat(row) * 36
+            let dot = ColorDot(frame: .zero); dot.color = color?.tint; add(dot, 14, y + 9, 14, 14)
+            add(label(color.map { $0.title + "标签" } ?? "无标签", 12), 34, y + 7, 76, 20)
             for (suffix, x) in columns {
-                let slot = color.key + (suffix ?? "")
+                let slot = folderSlot(color, empty: suffix == ".empty", split: suffix != nil)
                 let well = SlotWell(); well.image = configured.contains(slot) ? library.image(slot) : nil
                 well.toolTip = "上传" + folderSlotTitle(slot); well.onClick = { [weak self] in self?.upload(slot) }
-                add(well, x, y, 36, 36)
+                add(well, x, y, 32, 32)
                 let upload = SlotButton(title: "上传…", target: self, action: #selector(uploadClicked(_:))); upload.slot = slot; upload.bezelStyle = .rounded
-                add(upload, x + 44, y + 4, 80, 28)
+                add(upload, x + 44, y + 2, 80, 28)
                 let clear = SlotButton(title: "清除", target: self, action: #selector(clearClicked(_:))); clear.slot = slot; clear.bezelStyle = .rounded
-                add(clear, x + 128, y + 4, 64, 28)
-                add(label(configured.contains(slot) ? "已设置" : "原生", 10, .regular, muted), x + 198, y + 11, 80, 16)
+                add(clear, x + 128, y + 2, 64, 28)
+                add(label(configured.contains(slot) ? "已设置" : "原生", 10, .regular, muted), x + 198, y + 9, 80, 16)
             }
         }
         AquaStyle.install(in: flipped)
@@ -519,9 +521,10 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
 final class SlotButton: NSButton { var slot = "" }
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
 final class ColorDot: NSView {
-    var color = NSColor.gray
+    // nil draws a hollow dot for "no tag".
+    var color: NSColor?
     override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)); color.setFill(); path.fill()
+        let path = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)); (color ?? .white.withAlphaComponent(0.6)).setFill(); path.fill()
         NSColor.black.withAlphaComponent(0.2).setStroke(); path.stroke()
     }
 }
@@ -560,7 +563,8 @@ func runFolderIconTests() {
     let home = fm.homeDirectoryForCurrentUser.path
     check(FolderInspector.excluded(home + "/Library/Caches", prefixes: FolderInspector.defaultExcluded) && FolderInspector.excluded("/", prefixes: []))
     check(!FolderInspector.excluded(home + "/Documents", prefixes: FolderInspector.defaultExcluded))
-    check(folderSlot(.red, empty: true, split: false) == "red" && folderSlot(.red, empty: true, split: true) == "red.empty")
+    check(folderSlot(.red, empty: true, split: false) == "red" && folderSlot(.red, empty: true, split: true) == "red.empty" && folderSlot(nil, empty: false, split: true) == "none.full")
+    check(folderSlotTitle("none") == "无标签图标" && folderSlotTitle("none.empty") == "无标签 · 空文件夹图标")
 
     let library = FolderIconLibrary(directory: base.appendingPathComponent("Icons", isDirectory: true))
     let source = base.appendingPathComponent("cat.png")
@@ -573,13 +577,16 @@ func runFolderIconTests() {
     func plan(_ items: [FolderItem]) -> [String: FolderAction] { Dictionary(uniqueKeysWithValues: items.map { ($0.name, $0.action) }) }
     var items = engine.scan(root: root, options: options)
     check(plan(items) == ["工作": .apply("red"), "工作/子": .apply("green"), "素材": .keepCustom, "参考": .noIcon, "空的": .apply("red"), "无标签": .noTag])
+    try! library.importImage(from: source, slot: "none")
+    check(plan(engine.scan(root: root, options: options))["无标签"] == .apply("none"))
+    library.remove("none")
     options.subfolders = false
     check(plan(engine.scan(root: root, options: options))["工作/子"] == nil)
     options.subfolders = true; options.splitEmpty = true
-    try! library.importImage(from: source, slot: "red.empty")
+    try! library.importImage(from: source, slot: "red.empty"); try! library.importImage(from: source, slot: "none.full")
     let split = plan(engine.scan(root: root, options: options))
-    check(split["空的"] == .apply("red.empty") && split["工作"] == .noIcon && split["工作/子"] == .noIcon)
-    library.remove("red.empty"); options.splitEmpty = false
+    check(split["空的"] == .apply("red.empty") && split["工作"] == .noIcon && split["工作/子"] == .noIcon && split["无标签"] == .noTag)
+    library.remove("red.empty"); library.remove("none.full"); options.splitEmpty = false
     options.includeRoot = true
     check(plan(engine.scan(root: root, options: options))["A（当前文件夹）"] == .noTag)
     options.includeRoot = false
@@ -594,5 +601,5 @@ func runFolderIconTests() {
     check(FolderInspector.hasCustomIcon(child) && (try! Data(contentsOf: material.appendingPathComponent("Icon\r/..namedfork/rsrc"))) == materialIcon)
     check(plan(engine.scan(root: root, options: options))["工作"] == .keepCustom)
     check(!FolderInspector.hasCustomIcon(root))
-    print("Folder icon tests passed: tags, custom-icon protection, emptiness, scope, split slots, drift detection.")
+    print("Folder icon tests passed: tags, custom-icon protection, emptiness, no-tag slot, scope, split slots, drift detection.")
 }
