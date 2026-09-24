@@ -12,5 +12,8 @@
 <key>LSMinimumSystemVersion</key><string>13.0</string>
 <key>LSUIElement</key><true/>
 <key>NSHighResolutionCapable</key><true/>
+<key>NSDesktopFolderUsageDescription</key><string>用于按你的设置批量更换所选文件夹的图标。</string>
+<key>NSDocumentsFolderUsageDescription</key><string>用于按你的设置批量更换所选文件夹的图标。</string>
+<key>NSDownloadsFolderUsageDescription</key><string>用于按你的设置批量更换所选文件夹的图标。</string>
 <key>NSPrincipalClass</key><string>NSApplication</string>
 </dict></plist>

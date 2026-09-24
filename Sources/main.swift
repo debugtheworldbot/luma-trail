@@ -208,6 +208,7 @@ final class PreviewView: NSView {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     var cursorAppearance: CursorWindowController?
+    let folderIcons = FolderIconWindowController()
     let settings = TrailSettings()
     let system = ParticleSystem()
     let painter = ParticlePainter()
@@ -290,6 +291,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "退出 Luma Trail", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
         let cursorItem = NSMenuItem(title: "鼠标外观…", action: #selector(showCursorAppearance), keyEquivalent: "")
         cursorItem.target = self; menu.insertItem(cursorItem, at: menu.items.count - 1)
+        let folderItem = NSMenuItem(title: "文件夹图标…", action: #selector(showFolderIcons), keyEquivalent: "")
+        folderItem.target = self; menu.insertItem(folderItem, at: menu.items.count - 1)
         statusItem.menu = menu
     }
     func configureHotkey() {
@@ -363,6 +366,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         buildStatusMenu(); preview?.updateCaption(); preview?.needsDisplay = true
     }
     @objc func showCursorAppearance() { cursorAppearance?.show() }
+    @objc func showFolderIcons() { folderIcons.show() }
     @objc func showSettings() { settingsWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func chooseTheme(_ sender: ThemeButton) {
         if sender.theme == .custom && settings.customData == nil { importImage(); return }
@@ -561,8 +565,16 @@ if CommandLine.arguments.contains("--preview-stress-test") {
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
     }
+} else if let i = CommandLine.arguments.firstIndex(of: "--render-folder-icons"), CommandLine.arguments.count > i + 1 {
+    _ = NSApplication.shared
+    let controller = FolderIconWindowController(); controller.build()
+    let view = controller.window.contentView!
+    if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
+    }
 } else if CommandLine.arguments.contains("--self-test") {
-    runParticleTests(); runCursorTests()
+    runParticleTests(); runCursorTests(); runFolderIconTests()
 } else if CommandLine.arguments.contains("--cursor-restore") {
     _ = NSApplication.shared
     print(CursorManager().restore() ? "Restored" : "Restore failed")

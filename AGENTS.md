@@ -7,6 +7,7 @@ Luma Trail is a native Swift/AppKit menu-bar app for Apple Silicon Macs running 
 - `Sources/main.swift`: app lifecycle, settings UI, overlay windows, global shortcut, and command-line test dispatch.
 - `Sources/Particles.swift`: persisted trail settings, particle simulation, procedural textures, rendering, and model tests.
 - `Sources/CursorAppearance.swift`: cursor editor, image processing, persistence, restoration, and cursor tests.
+- `Sources/FolderIcons.swift`: Finder-tag folder icon scanning, preview, batch apply, history, and tests.
 - `Sources/CursorBridge.h` and `.m`: Objective-C bridge to dynamically loaded WindowServer APIs.
 - `Info.plist`: bundle metadata and version; `build.sh`: compilation and packaging.
 
