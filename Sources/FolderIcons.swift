@@ -264,46 +264,88 @@ final class FolderIconEngine {
         guard NSWorkspace.shared.setIcon(image, forFile: item.url.path, options: []), FolderInspector.hasCustomIcon(item.url) else { return fail("写入失败，可能没有权限") }
         item.outcome = .applied; item.fingerprint = FolderInspector.iconFingerprint(item.url)
     }
-    // Which folders changed, to which slot, and why others did not; used to restore them later.
+    // A log of each run: which folders changed, to which slot, and why others did not.
     struct Entry: Codable { let path: String; let slot: String?; let result: String; var fingerprint: String? }
     struct Record: Codable { let date: Date; let root: String; let items: [Entry] }
     var historyDirectory: URL { library.directory.deletingLastPathComponent().appendingPathComponent("FolderIconHistory", isDirectory: true) }
+    var historyFiles: [URL] {
+        ((try? FileManager.default.contentsOfDirectory(at: historyDirectory, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "json" }
+    }
     func record(_ items: [FolderItem], root: URL) {
         let entries = items.map { item -> Entry in
             var slot: String?; if case .apply(let s) = item.action { slot = s }
             return Entry(path: item.url.path, slot: slot, result: item.outcome?.text ?? "", fingerprint: item.fingerprint)
         }
-        save(Record(date: Date(), root: root.path, items: entries))
-    }
-    func save(_ record: Record) {
+        for item in items where item.outcome == .applied { if case .apply(let slot) = item.action { tracked[Self.key(item.url.path)] = Tracked(slot: slot, fingerprint: item.fingerprint) } }
+        saveTracked()
         let formatter = DateFormatter(); formatter.dateFormat = "yyyyMMdd-HHmmss"
-        guard let data = try? JSONEncoder().encode(record) else { return }
+        guard let data = try? JSONEncoder().encode(Record(date: Date(), root: root.path, items: entries)) else { return }
         try? FileManager.default.createDirectory(at: historyDirectory, withIntermediateDirectories: true)
-        try? data.write(to: historyDirectory.appendingPathComponent(formatter.string(from: record.date) + "-" + UUID().uuidString.prefix(8) + ".json"), options: .atomic)
+        try? data.write(to: historyDirectory.appendingPathComponent(formatter.string(from: Date()) + ".json"), options: .atomic)
     }
-    var historyFiles: [URL] {
-        ((try? FileManager.default.contentsOfDirectory(at: historyDirectory, includingPropertiesForKeys: nil)) ?? []).filter { $0.pathExtension == "json" }
-    }
-    // Every folder this app changed, newest record first per path.
-    func appliedHistory() -> [Entry] {
-        let records = historyFiles.compactMap { try? JSONDecoder().decode(Record.self, from: Data(contentsOf: $0)) }.sorted { $0.date > $1.date }
-        var seen = Set<String>(), entries: [Entry] = []
-        for entry in records.flatMap(\.items) where entry.result == FolderOutcome.applied.text && seen.insert(entry.path).inserted { entries.append(entry) }
-        return entries
-    }
-    // Removes only icons still matching what we wrote; failures stay in history for a retry.
-    func restoreAll() -> (restored: Int, skipped: Int, failed: Int) {
-        var restored = 0, skipped = 0, failed: [Entry] = []
-        for entry in appliedHistory() {
+
+    // Folders whose icon this app manages: the slot their tag last asked for, and the icon we wrote (nil = native now).
+    struct Tracked: Codable, Equatable { var slot: String; var fingerprint: String? }
+    static func key(_ path: String) -> String { URL(fileURLWithPath: path).resolvingSymlinksInPath().path }
+    var trackingFile: URL { library.directory.deletingLastPathComponent().appendingPathComponent("FolderIconTracked.json") }
+    lazy var tracked: [String: Tracked] = loadTracked()
+    func loadTracked() -> [String: Tracked] {
+        if let data = try? Data(contentsOf: trackingFile), let saved = try? JSONDecoder().decode([String: Tracked].self, from: data) { return saved }
+        // Earlier versions only kept the history log; adopt the icons it says we wrote.
+        let records = historyFiles.compactMap { try? JSONDecoder().decode(Record.self, from: Data(contentsOf: $0)) }.sorted { $0.date < $1.date }
+        var seeded: [String: Tracked] = [:]
+        for entry in records.flatMap(\.items) where entry.result == FolderOutcome.applied.text {
             let url = URL(fileURLWithPath: entry.path, isDirectory: true)
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue, FolderInspector.hasCustomIcon(url),
-                  entry.fingerprint == nil || FolderInspector.iconFingerprint(url) == entry.fingerprint else { skipped += 1; continue }
-            if FileManager.default.isWritableFile(atPath: url.path), NSWorkspace.shared.setIcon(nil, forFile: url.path, options: []), !FolderInspector.hasCustomIcon(url) { restored += 1 }
-            else { failed.append(entry) }
+            if let slot = entry.slot, FolderInspector.hasCustomIcon(url) { seeded[Self.key(entry.path)] = Tracked(slot: slot, fingerprint: FolderInspector.iconFingerprint(url)) }
+        }
+        return seeded
+    }
+    func saveTracked() {
+        guard let data = try? JSONEncoder().encode(tracked) else { return }
+        try? FileManager.default.createDirectory(at: trackingFile.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: trackingFile, options: .atomic)
+    }
+    // FSEvents roots: parents of managed folders, without nested duplicates.
+    var watchRoots: [String] {
+        let parents = Set(tracked.keys.map { ($0 as NSString).deletingLastPathComponent }).sorted()
+        return parents.reduce(into: [String]()) { roots, path in if !roots.contains(where: { path == $0 || path.hasPrefix($0 + "/") }) { roots.append(path) } }
+    }
+    // Keeps a managed folder's icon in step with its tag (and emptiness, in split mode): a new slot is applied,
+    // or native if that slot has no image. An icon we did not write means the user took over, so the folder is released.
+    func reconcile(_ key: String) {
+        guard var state = tracked[key] else { return }
+        let url = URL(fileURLWithPath: key, isDirectory: true)
+        guard let children = try? FolderInspector.visibleChildren(url) else { return }
+        let custom = FolderInspector.hasCustomIcon(url)
+        guard custom ? state.fingerprint != nil && FolderInspector.iconFingerprint(url) == state.fingerprint : state.fingerprint == nil else { tracked[key] = nil; return }
+        let slot = folderSlot(FolderInspector.finderColor(url), empty: children.isEmpty, split: state.slot.contains("."))
+        guard slot != state.slot else { return }
+        if library.configured.contains(slot), let image = library.image(slot) {
+            guard NSWorkspace.shared.setIcon(image, forFile: key, options: []), FolderInspector.hasCustomIcon(url) else { return }
+            state.fingerprint = FolderInspector.iconFingerprint(url)
+        } else if custom {
+            guard NSWorkspace.shared.setIcon(nil, forFile: key, options: []), !FolderInspector.hasCustomIcon(url) else { return }
+            state.fingerprint = nil
+        }
+        state.slot = slot; tracked[key] = state
+    }
+    func reconcile(_ keys: [String]) {
+        let before = tracked
+        keys.forEach(reconcile)
+        if tracked != before { saveTracked() }
+    }
+    var restorable: Int { tracked.values.filter { $0.fingerprint != nil }.count }
+    // Removes only icons still matching what we wrote; failures stay managed for a retry.
+    func restoreAll() -> (restored: Int, skipped: Int, failed: Int) {
+        var restored = 0, skipped = 0, failed: [String: Tracked] = [:]
+        for (key, state) in tracked where state.fingerprint != nil {
+            let url = URL(fileURLWithPath: key, isDirectory: true)
+            guard FolderInspector.hasCustomIcon(url), FolderInspector.iconFingerprint(url) == state.fingerprint else { skipped += 1; continue }
+            if FileManager.default.isWritableFile(atPath: key), NSWorkspace.shared.setIcon(nil, forFile: key, options: []), !FolderInspector.hasCustomIcon(url) { restored += 1 }
+            else { failed[key] = state }
         }
         historyFiles.forEach { try? FileManager.default.removeItem(at: $0) }
-        if !failed.isEmpty { save(Record(date: Date(), root: "", items: failed)) }
+        tracked = failed; saveTracked()
         return (restored, skipped, failed.count)
     }
 }
@@ -424,6 +466,27 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     var root: URL?
     var token = CancelToken()
     var phase = "scan"
+    var stream: FSEventStreamRef?
+
+    // Follows tag changes on managed folders, including ones made while the app was not running.
+    func startWatching() { engine.reconcile(Array(engine.tracked.keys)); watch() }
+    func watch() {
+        if let stream { FSEventStreamStop(stream); FSEventStreamInvalidate(stream); FSEventStreamRelease(stream); self.stream = nil }
+        let roots = engine.watchRoots
+        guard !roots.isEmpty else { return }
+        var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
+        let callback: FSEventStreamCallback = { _, info, _, paths, _, _ in
+            let controller = Unmanaged<FolderIconWindowController>.fromOpaque(info!).takeUnretainedValue()
+            let paths = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
+            // A tag change reports the folder itself; content changes report a child.
+            let keys = Set(paths.flatMap { [$0, ($0 as NSString).deletingLastPathComponent] }.map(FolderIconEngine.key))
+            controller.engine.reconcile(keys.filter { controller.engine.tracked[$0] != nil })
+        }
+        let flags = FSEventStreamCreateFlags(kFSEventStreamCreateFlagFileEvents | kFSEventStreamCreateFlagUseCFTypes)
+        guard let stream = FSEventStreamCreate(nil, callback, &context, roots as CFArray, FSEventStreamEventId(kFSEventStreamEventIdSinceNow), 0.5, flags) else { return }
+        FSEventStreamSetDispatchQueue(stream, .main); FSEventStreamStart(stream)
+        self.stream = stream
+    }
 
     @objc func show() {
         if window == nil { build() }
@@ -477,7 +540,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         checks[1].state = options.splitEmpty ? .on : .off
         checks[2].state = options.includeRoot ? .on : .off
         previewButton.isEnabled = options.root != nil
-        resetButton.isEnabled = !library.configured.isEmpty || options != FolderIconOptions() || !engine.historyFiles.isEmpty
+        resetButton.isEnabled = !library.configured.isEmpty || options != FolderIconOptions() || !engine.tracked.isEmpty
         if options.root == nil { status.stringValue = "先选择一个文件夹。未设置图标的颜色保持 macOS 原生图标。" }
         else if !options.subfolders && !options.includeRoot { status.stringValue = "关闭“处理子文件夹”时只处理第一层子文件夹。" }
         else { status.stringValue = "设置好图标后点击“预览”，确认后才会修改。" }
@@ -549,13 +612,13 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
     // Undoes everything: folder icons written by this app, slot images, options and the chosen folder.
     @objc func resetAll() {
-        let count = engine.appliedHistory().count
+        let count = engine.restorable
         let alert = NSAlert(); alert.messageText = "全部恢复默认？"
         alert.informativeText = "将把本应用修改过的 \(count) 个文件夹恢复为原生图标，并清除所有已设置的图标、选项和所选文件夹。之后被你手动换过图标的文件夹会保留。"
         alert.addButton(withTitle: "恢复默认"); alert.addButton(withTitle: "取消")
         alert.beginSheetModal(for: window) { [weak self] response in
             guard let self, response == .alertFirstButtonReturn else { return }
-            let result = self.engine.restoreAll()
+            let result = self.engine.restoreAll(); self.watch()
             self.library.removeAll(); self.options = FolderIconOptions(); self.options.save()
             self.refresh()
             var text = "已全部恢复默认：\(result.restored) 个文件夹恢复原生图标"
@@ -653,7 +716,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
     func finish() {
         guard let root else { return }
-        phase = "done"; engine.record(items, root: root)
+        phase = "done"; engine.record(items, root: root); watch()
         progress.isHidden = true
         let failed = count { if case .failed = $0.outcome { return true }; return false }
         let skipped = count { $0.outcome == .skipped }
@@ -764,11 +827,23 @@ func runFolderIconTests() {
     check(!FolderInspector.hasCustomIcon(root))
     // Restore removes only icons we wrote and still own; a user's later icon survives.
     engine.record(items, root: root)
-    check(Set(engine.appliedHistory().map { URL(fileURLWithPath: $0.path).resolvingSymlinksInPath().path }) == Set([work, child].map { $0.resolvingSymlinksInPath().path }))
+    let workKey = FolderIconEngine.key(work.path), childKey = FolderIconEngine.key(child.path)
+    check(Set(engine.tracked.keys) == [workKey, childKey] && engine.restorable == 2 && engine.watchRoots == [FolderIconEngine.key(root.path)])
+    // The icon follows the tag: removed → native (no "none" image), re-tagged → that color's image.
+    check(removexattr(work.path, "com.apple.metadata:_kMDItemUserTags", 0) == 0)
+    engine.reconcile([workKey])
+    check(!FolderInspector.hasCustomIcon(work) && engine.tracked[workKey] == FolderIconEngine.Tracked(slot: "none", fingerprint: nil))
+    let greenTag = try! PropertyListSerialization.data(fromPropertyList: ["Green\n2"], format: .binary, options: 0)
+    check(greenTag.withUnsafeBytes { setxattr(work.path, "com.apple.metadata:_kMDItemUserTags", $0.baseAddress, greenTag.count, 0, 0) } == 0)
+    engine.reconcile([workKey])
+    check(FolderInspector.hasCustomIcon(work) && engine.tracked[workKey]?.slot == "green" && engine.tracked[workKey]?.fingerprint != nil)
+    check(FolderIconEngine(library: library).tracked == engine.tracked)
     let blue = NSImage(size: NSSize(width: 32, height: 32), flipped: false) { rect in NSColor.systemBlue.setFill(); rect.fill(); return true }
     check(NSWorkspace.shared.setIcon(blue, forFile: child.path, options: []))
+    engine.reconcile([childKey])
+    check(engine.tracked[childKey] == nil && FolderInspector.hasCustomIcon(child))
     let restored = engine.restoreAll()
-    check(restored.restored == 1 && restored.skipped == 1 && restored.failed == 0 && engine.appliedHistory().isEmpty && engine.historyFiles.isEmpty)
+    check(restored.restored == 1 && restored.skipped == 0 && restored.failed == 0 && engine.tracked.isEmpty && engine.historyFiles.isEmpty)
     check(!FolderInspector.hasCustomIcon(work) && FolderInspector.hasCustomIcon(child) && FolderInspector.hasCustomIcon(material))
     library.removeAll()
     check(library.configured.isEmpty && !fm.fileExists(atPath: library.file("red").path))

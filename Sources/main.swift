@@ -383,6 +383,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cursorAppearance = CursorWindowController()
         painter.loadCustom(settings.customData)
         buildMainMenu(); buildWindow(); buildStatusMenu(); buildOverlays(); configureHotkey()
+        folderIcons.startWatching()
         NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         let workspace = NSWorkspace.shared.notificationCenter
         workspace.addObserver(self, selector: #selector(suspend), name: NSWorkspace.willSleepNotification, object: nil)
