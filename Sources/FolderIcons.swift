@@ -248,18 +248,96 @@ final class FolderIconEngine {
     }
 }
 
-final class SlotWell: NSView {
+// A Finder-style tile: the chosen image, or a gray "+" placeholder. Click or drop an image to set it.
+final class FolderSlotTile: NSView {
+    let slot: String, caption: String, dot: NSColor?
     var image: NSImage? { didSet { needsDisplay = true } }
-    var onClick: (() -> Void)?
-    override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6)
-        NSColor.white.withAlphaComponent(0.7).setFill(); path.fill()
-        NSColor(hex: 0x9AAAB8).setStroke(); path.stroke()
-        let icon = image ?? NSWorkspace.shared.icon(for: .folder)
-        icon.draw(in: bounds.insetBy(dx: 4, dy: 4), from: .zero, operation: .sourceOver, fraction: image == nil ? 0.35 : 1, respectFlipped: true, hints: nil)
+    var onPick: (() -> Void)?, onDrop: ((URL) -> Void)?, onClear: (() -> Void)?
+    private var hovering = false { didSet { needsDisplay = true } }
+    private var dropping = false { didSet { needsDisplay = true } }
+    init(slot: String, caption: String, dot: NSColor?, image: NSImage?) {
+        self.slot = slot; self.caption = caption; self.dot = dot; self.image = image
+        super.init(frame: .zero)
+        registerForDraggedTypes([.fileURL])
+        toolTip = "点击或拖入图片设置" + folderSlotTitle(slot)
+        setAccessibilityRole(.button); setAccessibilityLabel(folderSlotTitle(slot) + (image == nil ? "，未设置" : "，已设置"))
     }
-    override func mouseDown(with event: NSEvent) { onClick?() }
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    var card: NSRect { let side = min(bounds.width - 8, bounds.height - 24); return NSRect(x: (bounds.width - side) / 2, y: 3, width: side, height: side) }
+    var badge: NSRect { NSRect(x: card.maxX - 13, y: card.minY - 5, width: 18, height: 18) }
+    override func draw(_ dirtyRect: NSRect) {
+        let frame = NSBezierPath(roundedRect: card, xRadius: 3, yRadius: 3)
+        NSGraphicsContext.saveGraphicsState()
+        let shadow = NSShadow(); shadow.shadowColor = .black.withAlphaComponent(0.18); shadow.shadowBlurRadius = 4; shadow.shadowOffset = NSSize(width: 0, height: -1)
+        shadow.set(); NSColor.white.setFill(); frame.fill()
+        NSGraphicsContext.restoreGraphicsState()
+        let inner = card.insetBy(dx: card.width * 0.07, dy: card.width * 0.07)
+        if let image {
+            let scale = min(inner.width / image.size.width, inner.height / image.size.height)
+            let size = NSSize(width: image.size.width * scale, height: image.size.height * scale)
+            image.draw(in: NSRect(x: inner.midX - size.width / 2, y: inner.midY - size.height / 2, width: size.width, height: size.height), from: .zero, operation: .sourceOver, fraction: 1, respectFlipped: true, hints: nil)
+        } else {
+            NSColor(hex: hovering ? 0xCFCFCF : 0xD9D9D9).setFill(); inner.fill()
+            let r = inner.width * 0.23
+            NSColor(hex: 0x9B9B9B).setFill(); NSBezierPath(ovalIn: NSRect(x: inner.midX - r, y: inner.midY - r, width: r * 2, height: r * 2)).fill()
+            let plus = NSBezierPath(); plus.lineWidth = max(2, r * 0.13); plus.lineCapStyle = .round
+            plus.move(to: NSPoint(x: inner.midX - r * 0.42, y: inner.midY)); plus.line(to: NSPoint(x: inner.midX + r * 0.42, y: inner.midY))
+            plus.move(to: NSPoint(x: inner.midX, y: inner.midY - r * 0.42)); plus.line(to: NSPoint(x: inner.midX, y: inner.midY + r * 0.42))
+            NSColor.white.setStroke(); plus.stroke()
+        }
+        if dropping || hovering {
+            (dropping ? NSColor(hex: 0x2F7FD8) : NSColor(hex: 0x9AAAB8)).setStroke(); frame.lineWidth = dropping ? 3 : 1; frame.stroke()
+        }
+        if hovering && image != nil {
+            let circle = NSBezierPath(ovalIn: badge); NSColor(hex: 0x6E6E73).setFill(); circle.fill()
+            let x = NSBezierPath(); x.lineWidth = 1.6; x.lineCapStyle = .round
+            x.move(to: NSPoint(x: badge.midX - 4, y: badge.midY - 4)); x.line(to: NSPoint(x: badge.midX + 4, y: badge.midY + 4))
+            x.move(to: NSPoint(x: badge.midX + 4, y: badge.midY - 4)); x.line(to: NSPoint(x: badge.midX - 4, y: badge.midY + 4))
+            NSColor.white.setStroke(); x.stroke()
+        }
+        let attrs: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: bounds.width < 100 ? 10 : 12), .foregroundColor: NSColor(hex: 0x293D50)]
+        let text = caption as NSString, size = text.size(withAttributes: attrs)
+        let left = bounds.midX - (size.width + 13) / 2, y = card.maxY + 6
+        let dotRect = NSRect(x: left, y: y + size.height / 2 - 4, width: 8, height: 8)
+        let dotPath = NSBezierPath(ovalIn: dotRect); (dot ?? .white).setFill(); dotPath.fill()
+        NSColor.black.withAlphaComponent(0.25).setStroke(); dotPath.lineWidth = 0.8; dotPath.stroke()
+        text.draw(at: NSPoint(x: left + 13, y: y), withAttributes: attrs)
+    }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { hovering = true }
+    override func mouseExited(with event: NSEvent) { hovering = false }
+    override func mouseDown(with event: NSEvent) {
+        let p = convert(event.locationInWindow, from: nil)
+        if image != nil && badge.insetBy(dx: -3, dy: -3).contains(p) { onClear?() }
+        else if card.contains(p) { onPick?() }
+    }
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        menu.addItem(withTitle: "选择图片…", action: #selector(pick), keyEquivalent: "").target = self
+        if image != nil { menu.addItem(withTitle: "恢复原生图标", action: #selector(clear), keyEquivalent: "").target = self }
+        return menu
+    }
+    @objc private func pick() { onPick?() }
+    @objc private func clear() { onClear?() }
+    override func accessibilityPerformPress() -> Bool { onPick?(); return true }
+    private func droppedImage(_ info: NSDraggingInfo) -> URL? {
+        let options: [NSPasteboard.ReadingOptionKey: Any] = [.urlReadingFileURLsOnly: true, .urlReadingContentsConformToTypes: [UTType.image.identifier]]
+        return (info.draggingPasteboard.readObjects(forClasses: [NSURL.self], options: options) as? [URL])?.first
+    }
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        dropping = droppedImage(sender) != nil; return dropping ? .copy : []
+    }
+    override func draggingExited(_ sender: NSDraggingInfo?) { dropping = false }
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        dropping = false
+        guard let url = droppedImage(sender) else { return false }
+        onDrop?(url); return true
+    }
 }
 
 final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
@@ -347,33 +425,31 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         func add(_ v: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { v.frame = NSRect(x: x, y: y, width: w, height: h); flipped.addSubview(v) }
         let muted = NSColor(hex: 0x526D82)
         add(label("图标", 12, .semibold), 12, 10, 60, 20)
-        add(label("未设置的组合保持原生图标，不会借用其他颜色或状态的图标。", 10, .regular, muted), 60, 13, 400, 16)
-        let columns: [(String?, CGFloat)] = options.splitEmpty ? [(".empty", 112), (".full", 412)] : [(nil, 112)]
-        if options.splitEmpty {
-            add(label("空文件夹", 11, .medium, muted), 112, 32, 120, 16)
-            add(label("有内容", 11, .medium, muted), 412, 32, 120, 16)
-        }
+        add(label("点击方块或把图片拖进来设置；未设置的保持原生，不会借用其他颜色或状态。", 10, .regular, muted), 60, 13, 600, 16)
         let configured = library.configured
         let colors: [FinderColor?] = FinderColor.displayOrder + [nil]
-        for (row, color) in colors.enumerated() {
-            let y = 50 + CGFloat(row) * 36
-            let dot = ColorDot(frame: .zero); dot.color = color?.tint; add(dot, 14, y + 9, 14, 14)
-            add(label(color.map { $0.title + "标签" } ?? "无标签", 12), 34, y + 7, 76, 20)
-            for (suffix, x) in columns {
-                let slot = folderSlot(color, empty: suffix == ".empty", split: suffix != nil)
-                let well = SlotWell(); well.image = configured.contains(slot) ? library.image(slot) : nil
-                well.toolTip = "上传" + folderSlotTitle(slot); well.onClick = { [weak self] in self?.upload(slot) }
-                add(well, x, y, 32, 32)
-                let upload = SlotButton(title: "上传…", target: self, action: #selector(uploadClicked(_:))); upload.slot = slot; upload.bezelStyle = .rounded
-                add(upload, x + 44, y + 2, 80, 28)
-                let clear = SlotButton(title: "清除", target: self, action: #selector(clearClicked(_:))); clear.slot = slot; clear.bezelStyle = .rounded
-                add(clear, x + 128, y + 2, 64, 28)
-                add(label(configured.contains(slot) ? "已设置" : "原生", 10, .regular, muted), x + 198, y + 9, 80, 16)
+        func tile(_ color: FinderColor?, suffix: String?, caption: String) -> FolderSlotTile {
+            let slot = folderSlot(color, empty: suffix == ".empty", split: suffix != nil)
+            let tile = FolderSlotTile(slot: slot, caption: caption, dot: color?.tint, image: configured.contains(slot) ? library.image(slot) : nil)
+            tile.onPick = { [weak self] in self?.upload(slot) }
+            tile.onDrop = { [weak self] url in self?.importSlot(url, slot: slot) }
+            tile.onClear = { [weak self] in self?.library.remove(slot); self?.status.stringValue = folderSlotTitle(slot) + "已恢复原生。"; self?.buildIcons() }
+            return tile
+        }
+        if options.splitEmpty {
+            // One column per color: empty folders on top, folders with content below.
+            for (row, suffix) in [".empty", ".full"].enumerated() {
+                let y = 64 + CGFloat(row) * 124
+                add(label(row == 0 ? "空文件夹" : "有内容", 11, .medium, muted), 14, y + 30, 66, 16)
+                for (column, color) in colors.enumerated() {
+                    add(tile(color, suffix: suffix, caption: color?.title ?? "无标签"), 80 + CGFloat(column) * 79, y, 78, 96)
+                }
+            }
+        } else {
+            for (index, color) in colors.enumerated() {
+                add(tile(color, suffix: nil, caption: color.map { $0.title + "标签" } ?? "无标签"), 20 + CGFloat(index % 4) * 171, 42 + CGFloat(index / 4) * 150, 171, 140)
             }
         }
-        AquaStyle.install(in: flipped)
-        // Cell replacement resets enabled state, so apply it afterwards.
-        for case let clear as SlotButton in flipped.subviews where clear.title == "清除" { clear.isEnabled = configured.contains(clear.slot) }
     }
     @objc func optionChanged(_ sender: NSButton) {
         let on = sender.state == .on
@@ -390,18 +466,19 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
             self.options.root = url.standardizedFileURL.path; self.options.save(); self.refresh()
         }
     }
-    @objc func uploadClicked(_ sender: SlotButton) { upload(sender.slot) }
-    @objc func clearClicked(_ sender: SlotButton) { library.remove(sender.slot); buildIcons() }
     func upload(_ slot: String) {
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .icns]
         panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
         panel.message = "为“\(folderSlotTitle(slot))”选择图片，透明背景 PNG 或 ICNS 效果最好。"; panel.prompt = "上传"
         panel.beginSheetModal(for: window) { [weak self] result in
             guard let self, result == .OK, let url = panel.url else { return }
-            do { try self.library.importImage(from: url, slot: slot); self.status.stringValue = "已设置" + folderSlotTitle(slot) + "。" }
-            catch { self.status.stringValue = "上传失败：请选择 20 MB 内的 PNG、JPEG、HEIC、TIFF 或 ICNS 图片。" }
-            self.buildIcons()
+            self.importSlot(url, slot: slot)
         }
+    }
+    func importSlot(_ url: URL, slot: String) {
+        do { try library.importImage(from: url, slot: slot); status.stringValue = "已设置" + folderSlotTitle(slot) + "。" }
+        catch { status.stringValue = "设置失败：请选择 20 MB 内的 PNG、JPEG、HEIC、TIFF 或 ICNS 图片。" }
+        buildIcons()
     }
 
     // MARK: Preview → confirm → apply → result
@@ -518,16 +595,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
 }
 
-final class SlotButton: NSButton { var slot = "" }
 final class FlippedView: NSView { override var isFlipped: Bool { true } }
-final class ColorDot: NSView {
-    // nil draws a hollow dot for "no tag".
-    var color: NSColor?
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(ovalIn: bounds.insetBy(dx: 1, dy: 1)); (color ?? .white.withAlphaComponent(0.6)).setFill(); path.fill()
-        NSColor.black.withAlphaComponent(0.2).setStroke(); path.stroke()
-    }
-}
 
 func runFolderIconTests() {
     let fm = FileManager.default

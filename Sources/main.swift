@@ -717,7 +717,9 @@ if CommandLine.arguments.contains("--preview-stress-test") {
     }
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-folder-icons"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
-    let controller = FolderIconWindowController(); controller.build()
+    let controller = FolderIconWindowController()
+    if CommandLine.arguments.contains("--split") { controller.options.splitEmpty = true }
+    controller.build()
     let view = controller.window.contentView!
     if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
         view.cacheDisplay(in: view.bounds, to: bitmap)
