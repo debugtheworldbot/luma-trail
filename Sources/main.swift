@@ -33,15 +33,36 @@ final class Surface: NSView {
 }
 
 final class AquaWindowButton: NSButton {
+    enum Glyph { case close, minimize, zoom }
     let tint: NSColor
     let border: NSColor
-    init(tint: NSColor, border: NSColor? = nil, title: String, target: AnyObject?, action: Selector?) {
-        self.tint = tint; self.border = border ?? tint.blended(withFraction: 0.45, of: .black)!
+    let glyph: Glyph
+    // Like native traffic lights, hovering any button reveals the glyphs of the whole group.
+    var showsGlyph = false { didSet { if showsGlyph != oldValue { needsDisplay = true } } }
+    init(tint: NSColor, border: NSColor? = nil, glyph: Glyph, title: String, target: AnyObject?, action: Selector?) {
+        self.tint = tint; self.border = border ?? tint.blended(withFraction: 0.45, of: .black)!; self.glyph = glyph
         super.init(frame: .zero)
         self.title = ""; self.target = target; self.action = action
         isBordered = false; setAccessibilityLabel(title); toolTip = title
     }
     required init?(coder: NSCoder) { fatalError() }
+    private var group: [AquaWindowButton] { superview?.subviews.compactMap { $0 as? AquaWindowButton } ?? [self] }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        trackingAreas.forEach(removeTrackingArea)
+        addTrackingArea(NSTrackingArea(rect: bounds, options: [.mouseEnteredAndExited, .activeAlways], owner: self))
+    }
+    override func mouseEntered(with event: NSEvent) { group.forEach { $0.showsGlyph = true } }
+    override func mouseExited(with event: NSEvent) {
+        guard let superview else { return }
+        let point = superview.convert(event.locationInWindow, from: nil)
+        if !group.contains(where: { $0.frame.contains(point) }) { group.forEach { $0.showsGlyph = false } }
+    }
+    override func mouseDown(with event: NSEvent) {
+        super.mouseDown(with: event)
+        // The window may close or miniaturize without delivering mouseExited.
+        group.forEach { $0.showsGlyph = false }
+    }
     override func draw(_ dirtyRect: NSRect) {
         let d = dp(18), rect = NSRect(x: bounds.midX - d / 2, y: bounds.midY - d / 2, width: d, height: d)
         let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
@@ -50,6 +71,33 @@ final class AquaWindowButton: NSButton {
         border.setStroke(); circle.lineWidth = 1; circle.stroke()
         let gleam = NSBezierPath(ovalIn: NSRect(x: rect.midX - d * 0.28, y: rect.midY + d * 0.06, width: d * 0.56, height: d * 0.36))
         NSGradient(starting: .white.withAlphaComponent(0.1), ending: .white.withAlphaComponent(0.9))?.draw(in: gleam, angle: 90)
+        if showsGlyph { drawGlyph(in: rect) }
+    }
+    private func drawGlyph(in rect: NSRect) {
+        let color = border.blended(withFraction: 0.35, of: .black)!.withAlphaComponent(isEnabled ? 0.85 : 0.35)
+        let r = rect.width * 0.24, c = NSPoint(x: rect.midX, y: rect.midY)
+        let path = NSBezierPath(); path.lineWidth = max(1.1, rect.width * 0.1); path.lineCapStyle = .round
+        switch glyph {
+        case .close:
+            path.move(to: NSPoint(x: c.x - r, y: c.y - r)); path.line(to: NSPoint(x: c.x + r, y: c.y + r))
+            path.move(to: NSPoint(x: c.x - r, y: c.y + r)); path.line(to: NSPoint(x: c.x + r, y: c.y - r))
+            color.setStroke(); path.stroke()
+        case .minimize:
+            path.move(to: NSPoint(x: c.x - r * 1.15, y: c.y)); path.line(to: NSPoint(x: c.x + r * 1.15, y: c.y))
+            color.setStroke(); path.stroke()
+        case .zoom:
+            // Two opposing triangles toward the top-left and bottom-right, as in the native full-screen glyph.
+            let up: CGFloat = isFlipped ? -1 : 1, s = r * 1.1, gap = r * 0.18
+            for sign: CGFloat in [1, -1] {
+                let corner = NSPoint(x: c.x - sign * (s * 0.5 + gap), y: c.y + sign * up * (s * 0.5 + gap))
+                let tri = NSBezierPath()
+                tri.move(to: corner)
+                tri.line(to: NSPoint(x: corner.x + sign * s, y: corner.y))
+                tri.line(to: NSPoint(x: corner.x, y: corner.y - sign * up * s))
+                tri.close()
+                color.setFill(); tri.fill()
+            }
+        }
     }
 }
 
@@ -552,9 +600,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             (0xFBD689, 0xA5790A, "最小化", #selector(NSWindow.performMiniaturize(_:))),
             (0x9FDDC3, 0x1D7D58, "缩放（此窗口为固定尺寸）", nil)
         ]
+        let glyphs: [AquaWindowButton.Glyph] = [.close, .minimize, .zoom]
         for (index, control) in controls.enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), title: control.2, target: settingsWindow, action: control.3)
-            button.frame = NSRect(x: dp(24.5 + CGFloat(index) * 27) - 8, y: dp(21) - 8, width: 16, height: 16)
+            let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), glyph: glyphs[index], title: control.2, target: settingsWindow, action: control.3)
+            button.frame = NSRect(x: dp(24.5 + CGFloat(index) * 27) - 9, y: dp(21) - 8, width: 18, height: 16)
             button.isEnabled = control.3 != nil
             header.addSubview(button)
         }

@@ -298,8 +298,8 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 760, height: 40)); content.addSubview(header)
         for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = true }
         for (index, item) in [(0xE85B52, "关闭", #selector(NSWindow.performClose(_:))), (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:)))].enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: item.0), title: item.1, target: window, action: item.2)
-            button.frame = NSRect(x: 13 + CGFloat(index) * 28, y: 7, width: 26, height: 26); header.addSubview(button)
+            let button = AquaWindowButton(tint: NSColor(hex: item.0), glyph: index == 0 ? .close : .minimize, title: item.1, target: window, action: item.2)
+            button.frame = NSRect(x: 12 + CGFloat(index) * 28, y: 7, width: 28, height: 26); header.addSubview(button)
         }
         let surface = Surface(frame: NSRect(x: 0, y: 40, width: 760, height: 660)); content.addSubview(surface)
         func put(_ v: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { v.frame = NSRect(x: x, y: y, width: w, height: h); surface.addSubview(v) }
