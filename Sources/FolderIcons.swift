@@ -2,12 +2,36 @@ import AppKit
 import UniformTypeIdentifiers
 
 // Raw values follow Finder's tag color numbers stored in _kMDItemUserTags.
-enum FinderColor: Int, CaseIterable {
-    case gray = 1, green, purple, blue, yellow, red, orange
-    static let displayOrder: [FinderColor] = [.red, .orange, .yellow, .green, .blue, .purple, .gray]
-    var key: String { ["", "gray", "green", "purple", "blue", "yellow", "red", "orange"][rawValue] }
-    var title: String { ["", "灰色", "绿色", "紫色", "蓝色", "黄色", "红色", "橙色"][rawValue] }
-    var tint: NSColor { NSColor(hex: [0, 0x9A9A9E, 0x5CB85C, 0xA56BD1, 0x3E8EDE, 0xF2C94C, 0xE5534B, 0xF0963A][rawValue]) }
+// The list comes from the system, so colors added by a future macOS get their own slot.
+struct FinderColor: Hashable {
+    let rawValue: Int
+    init?(rawValue: Int) { guard rawValue >= 1 else { return nil }; self.rawValue = rawValue }
+    private init(_ rawValue: Int) { self.rawValue = rawValue }
+    static let gray = FinderColor(1), green = FinderColor(2), purple = FinderColor(3), blue = FinderColor(4)
+    static let yellow = FinderColor(5), red = FinderColor(6), orange = FinderColor(7)
+    private static let known = ["", "gray", "green", "purple", "blue", "yellow", "red", "orange"]
+    private static let knownTitles = ["", "灰色", "绿色", "紫色", "蓝色", "黄色", "红色", "橙色"]
+    private static let knownTints = [0, 0x9A9A9E, 0x5CB85C, 0xA56BD1, 0x3E8EDE, 0xF2C94C, 0xE5534B, 0xF0963A]
+    // Index 0 of fileLabels is "None"; fall back to the seven classic colors.
+    static let systemLabels: [String] = { let labels = NSWorkspace.shared.fileLabels; return labels.count > 1 ? labels : ["None"] + known.dropFirst() }()
+    static var displayOrder: [FinderColor] {
+        let classic = [red, orange, yellow, green, blue, purple, gray]
+        return classic + (8..<max(8, systemLabels.count)).map(FinderColor.init)
+    }
+    var key: String { rawValue < Self.known.count ? Self.known[rawValue] : "color\(rawValue)" }
+    var title: String {
+        if rawValue < Self.knownTitles.count { return Self.knownTitles[rawValue] }
+        return rawValue < Self.systemLabels.count ? Self.systemLabels[rawValue] : "颜色 \(rawValue)"
+    }
+    var tint: NSColor {
+        if rawValue < Self.knownTints.count { return NSColor(hex: Self.knownTints[rawValue]) }
+        let colors = NSWorkspace.shared.fileLabelColors
+        return rawValue < colors.count ? colors[rawValue] : .gray
+    }
+    static func fromKey(_ key: String) -> FinderColor? {
+        if let index = known.firstIndex(of: key), index > 0 { return FinderColor(index) }
+        return key.hasPrefix("color") ? Int(key.dropFirst(5)).flatMap { FinderColor(rawValue: $0) } : nil
+    }
 }
 
 struct FolderIconOptions: Codable, Equatable {
@@ -29,7 +53,7 @@ func folderSlot(_ color: FinderColor?, empty: Bool, split: Bool) -> String {
 }
 func folderSlotTitle(_ slot: String) -> String {
     let parts = slot.split(separator: ".").map(String.init)
-    let color = parts[0] == "none" ? "无标签" : FinderColor.allCases.first { $0.key == parts[0] }?.title ?? parts[0]
+    let color = parts[0] == "none" ? "无标签" : FinderColor.fromKey(parts[0])?.title ?? parts[0]
     return parts.count == 1 ? color + "图标" : color + (parts[1] == "empty" ? " · 空文件夹图标" : " · 有内容图标")
 }
 
@@ -427,7 +451,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         add(label("图标", 12, .semibold), 12, 10, 60, 20)
         add(label("点击方块或把图片拖进来设置；未设置的保持原生，不会借用其他颜色或状态。", 10, .regular, muted), 60, 13, 600, 16)
         let configured = library.configured
-        let colors: [FinderColor?] = FinderColor.displayOrder + [nil]
+        let colors: [FinderColor?] = [nil] + FinderColor.displayOrder
         func tile(_ color: FinderColor?, suffix: String?, caption: String) -> FolderSlotTile {
             let slot = folderSlot(color, empty: suffix == ".empty", split: suffix != nil)
             let tile = FolderSlotTile(slot: slot, caption: caption, dot: color?.tint, image: configured.contains(slot) ? library.image(slot) : nil)
@@ -441,13 +465,16 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
             for (row, suffix) in [".empty", ".full"].enumerated() {
                 let y = 64 + CGFloat(row) * 124
                 add(label(row == 0 ? "空文件夹" : "有内容", 11, .medium, muted), 14, y + 30, 66, 16)
+                // Tiles shrink to fit if the system offers more colors.
+                let width = min(79, 632 / CGFloat(colors.count))
                 for (column, color) in colors.enumerated() {
-                    add(tile(color, suffix: suffix, caption: color?.title ?? "无标签"), 80 + CGFloat(column) * 79, y, 78, 96)
+                    add(tile(color, suffix: suffix, caption: color?.title ?? "无标签"), 80 + CGFloat(column) * width, y, width - 1, width + 17)
                 }
             }
         } else {
+            let columns = max(4, (colors.count + 1) / 2), width = 684 / CGFloat(columns), height = min(140, width * 0.82)
             for (index, color) in colors.enumerated() {
-                add(tile(color, suffix: nil, caption: color.map { $0.title + "标签" } ?? "无标签"), 20 + CGFloat(index % 4) * 171, 42 + CGFloat(index / 4) * 150, 171, 140)
+                add(tile(color, suffix: nil, caption: color.map { $0.title + "标签" } ?? "无标签"), 20 + CGFloat(index % columns) * width, 42 + CGFloat(index / columns) * (height + 10), width, height)
             }
         }
     }
@@ -633,6 +660,10 @@ func runFolderIconTests() {
     check(!FolderInspector.excluded(home + "/Documents", prefixes: FolderInspector.defaultExcluded))
     check(folderSlot(.red, empty: true, split: false) == "red" && folderSlot(.red, empty: true, split: true) == "red.empty" && folderSlot(nil, empty: false, split: true) == "none.full")
     check(folderSlotTitle("none") == "无标签图标" && folderSlotTitle("none.empty") == "无标签 · 空文件夹图标")
+    // Classic keys stay stable for saved icons; extra system colors get their own slot.
+    check(FinderColor.displayOrder.prefix(7).map(\.key) == ["red", "orange", "yellow", "green", "blue", "purple", "gray"])
+    check(FinderColor.displayOrder.count == max(7, FinderColor.systemLabels.count - 1))
+    check(FinderColor(rawValue: 9)?.key == "color9" && FinderColor.fromKey("color9") == FinderColor(rawValue: 9) && FinderColor.fromKey("red") == .red)
 
     let library = FolderIconLibrary(directory: base.appendingPathComponent("Icons", isDirectory: true))
     let source = base.appendingPathComponent("cat.png")
@@ -648,6 +679,11 @@ func runFolderIconTests() {
     try! library.importImage(from: source, slot: "none")
     check(plan(engine.scan(root: root, options: options))["无标签"] == .apply("none"))
     library.remove("none")
+    let future = dir("新色", tags: ["Future\n9"])
+    check(plan(engine.scan(root: root, options: options))["新色"] == .noIcon)
+    try! library.importImage(from: source, slot: "color9")
+    check(plan(engine.scan(root: root, options: options))["新色"] == .apply("color9"))
+    library.remove("color9"); try! fm.removeItem(at: future)
     options.subfolders = false
     check(plan(engine.scan(root: root, options: options))["工作/子"] == nil)
     options.subfolders = true; options.splitEmpty = true
@@ -669,5 +705,5 @@ func runFolderIconTests() {
     check(FolderInspector.hasCustomIcon(child) && (try! Data(contentsOf: material.appendingPathComponent("Icon\r/..namedfork/rsrc"))) == materialIcon)
     check(plan(engine.scan(root: root, options: options))["工作"] == .keepCustom)
     check(!FolderInspector.hasCustomIcon(root))
-    print("Folder icon tests passed: tags, custom-icon protection, emptiness, no-tag slot, scope, split slots, drift detection.")
+    print("Folder icon tests passed: tags, custom-icon protection, emptiness, no-tag and extra color slots, scope, split slots, drift detection.")
 }
