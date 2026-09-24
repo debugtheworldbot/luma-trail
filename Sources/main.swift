@@ -28,85 +28,79 @@ final class OverlayView: NSView {
 
 final class Surface: NSView {
     override var isFlipped: Bool { true }
-    override func draw(_ dirtyRect: NSRect) {
-        NSGradient(colors: [NSColor(hex: 0xC7EBF7), NSColor(hex: 0xEFF9F9), NSColor(hex: 0xE3F0D6)])?.draw(in: bounds, angle: 90)
-        NSColor.white.withAlphaComponent(0.24).setFill()
-        for y in stride(from: 0, to: Int(bounds.height), by: 4) {
-            NSRect(x: 0, y: CGFloat(y), width: bounds.width, height: 2).fill()
-        }
-        NSGraphicsContext.saveGraphicsState()
-        var transform = AffineTransform(translationByX: 0, byY: 95)
-        transform.scale(x: 1, y: -1); (transform as NSAffineTransform).concat()
-        AeroScenery.bubble(NSRect(x: bounds.width - 224, y: 23, width: 53, height: 53))
-        AeroScenery.bubble(NSRect(x: bounds.width - 157, y: 50, width: 26, height: 26))
-        let swoosh = NSBezierPath()
-        swoosh.move(to: NSPoint(x: bounds.width * 0.48, y: 4))
-        swoosh.curve(to: NSPoint(x: bounds.width, y: 72), controlPoint1: NSPoint(x: bounds.width * 0.7, y: 100), controlPoint2: NSPoint(x: bounds.width * 0.86, y: -5))
-        NSColor.white.withAlphaComponent(0.65).setStroke(); swoosh.lineWidth = 3; swoosh.stroke()
-        NSGraphicsContext.restoreGraphicsState()
-    }
+    // dirtyRect can extend past bounds now that views no longer clip by default.
+    override func draw(_ dirtyRect: NSRect) { AquaStyle.background.setFill(); dirtyRect.intersection(bounds).fill() }
 }
 
 final class AquaWindowButton: NSButton {
     let tint: NSColor
-    init(tint: NSColor, title: String, target: AnyObject?, action: Selector?) {
-        self.tint = tint
+    let border: NSColor
+    init(tint: NSColor, border: NSColor? = nil, title: String, target: AnyObject?, action: Selector?) {
+        self.tint = tint; self.border = border ?? tint.blended(withFraction: 0.45, of: .black)!
         super.init(frame: .zero)
         self.title = ""; self.target = target; self.action = action
         isBordered = false; setAccessibilityLabel(title); toolTip = title
     }
     required init?(coder: NSCoder) { fatalError() }
     override func draw(_ dirtyRect: NSRect) {
-        let circle = NSBezierPath(ovalIn: bounds.insetBy(dx: 4, dy: 4))
-        NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow(); shadow.shadowColor = .black.withAlphaComponent(0.3)
-        shadow.shadowBlurRadius = 1; shadow.shadowOffset = NSSize(width: 0, height: -1)
-        shadow.set(); tint.setFill(); circle.fill()
-        NSGraphicsContext.restoreGraphicsState()
-        let top = tint.blended(withFraction: isHighlighted ? 0.15 : 0.5, of: .black)!
-        let bottom = tint.blended(withFraction: 0.5, of: .white)!
-        NSGradient(colors: [bottom, tint, top])?.draw(in: circle, angle: 90)
-        tint.blended(withFraction: 0.45, of: .black)!.setStroke()
-        circle.lineWidth = 1; circle.stroke()
-        let gleam = NSBezierPath(ovalIn: NSRect(x: bounds.midX - 5, y: bounds.midY + 1, width: 10, height: 6))
-        NSGradient(starting: .white.withAlphaComponent(0.05), ending: .white.withAlphaComponent(0.95))?.draw(in: gleam, angle: 90)
-        let reflection = NSBezierPath(ovalIn: NSRect(x: bounds.midX - 4, y: bounds.midY - 6, width: 8, height: 3))
-        NSColor.white.withAlphaComponent(0.35).setFill(); reflection.fill()
+        let d = dp(18), rect = NSRect(x: bounds.midX - d / 2, y: bounds.midY - d / 2, width: d, height: d)
+        let circle = NSBezierPath(ovalIn: rect.insetBy(dx: 0.5, dy: 0.5))
+        let top = tint.blended(withFraction: isHighlighted ? 0.3 : 0.12, of: border)!
+        NSGradient(colors: [tint.blended(withFraction: 0.25, of: .white)!, tint, top])?.draw(in: circle, angle: 90)
+        border.setStroke(); circle.lineWidth = 1; circle.stroke()
+        let gleam = NSBezierPath(ovalIn: NSRect(x: rect.midX - d * 0.28, y: rect.midY + d * 0.06, width: d * 0.56, height: d * 0.36))
+        NSGradient(starting: .white.withAlphaComponent(0.1), ending: .white.withAlphaComponent(0.9))?.draw(in: gleam, angle: 90)
     }
 }
 
 final class AquaTitlebar: NSView {
+    var title = "Luma Trail"
+    var symbol: String?
     override func draw(_ dirtyRect: NSRect) {
-        NSGradient(colors: [NSColor(hex: 0xBEB9BE), NSColor(hex: 0xE1DDE0), NSColor(hex: 0xFAF8F9)])?.draw(in: bounds, angle: 90)
-        NSColor.white.withAlphaComponent(0.9).setFill()
-        NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
-        NSColor(hex: 0x9A9299).setFill()
-        NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
-        let text = "Luma Trail" as NSString
-        let shadow = NSShadow(); shadow.shadowColor = .white.withAlphaComponent(0.9)
-        shadow.shadowOffset = NSSize(width: 0, height: -1)
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont.systemFont(ofSize: 15, weight: .medium),
-            .foregroundColor: NSColor(hex: 0x293D50), .shadow: shadow
-        ]
-        let size = text.size(withAttributes: attributes)
-        text.draw(at: NSPoint(x: (bounds.width - size.width) / 2, y: (bounds.height - size.height) / 2), withAttributes: attributes)
+        AquaStyle.gradient([0xFEFEFE, 0xF7F5F6, 0xEFEBED], [0, 0.5, 1]).draw(in: bounds, angle: -90)
+        AquaStyle.line.setFill(); NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 10.5), .foregroundColor: AquaStyle.ink]
+        let text = title as NSString, size = text.size(withAttributes: attributes)
+        let icon = symbol.flatMap { NSImage(systemSymbolName: $0, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 10, weight: .regular)) }
+        let iconWidth = icon.map { $0.size.width + 4 } ?? 0
+        let x = (bounds.width - size.width - iconWidth) / 2, y = (bounds.height - size.height) / 2 + 0.5
+        if let icon {
+            let tinted = NSImage(size: icon.size, flipped: false) { rect in
+                icon.draw(in: rect); AquaStyle.ink.set(); rect.fill(using: .sourceAtop); return true
+            }
+            tinted.draw(in: NSRect(x: x, y: bounds.midY - icon.size.height / 2 + 0.5, width: icon.size.width, height: icon.size.height))
+        }
+        text.draw(at: NSPoint(x: x + iconWidth, y: y), withAttributes: attributes)
     }
     override func mouseDown(with event: NSEvent) { window?.performDrag(with: event) }
 }
 
+// Banner artwork comes from the design; the rim and corners are drawn to stay crisp.
+final class BannerView: NSView {
+    let image = NSImage(named: "SettingsBanner")
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 11, yRadius: 11)
+        NSGraphicsContext.saveGraphicsState(); path.addClip()
+        if let image { image.draw(in: bounds) } else { AquaStyle.gradient([0xE8E8FD, 0xFDF3FA], [0, 1]).draw(in: bounds, angle: 0) }
+        NSGraphicsContext.restoreGraphicsState()
+        AquaStyle.line.setStroke(); path.lineWidth = 1; path.stroke()
+    }
+}
+
 final class ThemeBoard: NSView {
     override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) { NSColor.white.setFill(); dirtyRect.intersection(bounds).fill() }
 }
 
 func label(_ text: String, _ size: CGFloat, _ weight: NSFont.Weight = .regular,
-           _ color: NSColor = NSColor(hex: 0x293D50)) -> NSTextField {
+           _ color: NSColor = AquaStyle.ink) -> NSTextField {
     let v = NSTextField(labelWithString: text)
     v.font = .systemFont(ofSize: size, weight: weight); v.textColor = color
     return v
 }
 
-final class ThemeButton: NSButton {
+final class ThemeRow: NSButton {
+    static let height = dp(80)
     override var isFlipped: Bool { false }
     let theme: TrailTheme
     var selected = false { didSet { needsDisplay = true } }
@@ -118,17 +112,141 @@ final class ThemeButton: NSButton {
     }
     required init?(coder: NSCoder) { fatalError() }
     override func draw(_ dirtyRect: NSRect) {
-        AquaStyle.glass(bounds.insetBy(dx: 3, dy: 3), blue: selected, pressed: isHighlighted, radius: 7)
+        if selected || isHighlighted { NSColor(hex: selected ? 0xFFF3F9 : 0xFFF8FB).setFill(); bounds.fill() }
+        let thumb = NSRect(x: dp(20), y: bounds.height - dp(69), width: dp(60), height: dp(60))
+        NSColor(hex: 0xFFE7F3).setFill(); thumb.fill()
+        let art = thumb.insetBy(dx: dp(7), dy: dp(7))
         if theme == .custom || theme == .mixed {
-            NSImage(systemSymbolName: theme.symbol, accessibilityDescription: nil)?.draw(in: NSRect(x: bounds.midX - 12, y: 20, width: 22, height: 22))
+            let config = NSImage.SymbolConfiguration(pointSize: 17, weight: .regular).applying(.init(paletteColors: [NSColor(hex: 0xD0679F)]))
+            if let symbol = NSImage(systemSymbolName: theme.symbol, accessibilityDescription: nil)?.withSymbolConfiguration(config) {
+                symbol.draw(in: NSRect(x: art.midX - symbol.size.width / 2, y: art.midY - symbol.size.height / 2, width: symbol.size.width, height: symbol.size.height))
+            }
         } else {
-            let image = NSImage(cgImage: ParticlePainter.texture(theme: theme, color: theme.colors[0]), size: NSSize(width:128,height:128))
-            image.draw(in: NSRect(x: bounds.midX - 15, y: 18, width: 27, height: 27))
+            NSImage(cgImage: ParticlePainter.texture(theme: theme, color: theme.colors[0]), size: NSSize(width: 128, height: 128)).draw(in: art)
         }
-        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: NSColor(hex: 0x163C61)]
-        let text = theme.title as NSString
-        text.draw(at: NSPoint(x: (bounds.width - text.size(withAttributes:attributes).width) / 2, y: 5), withAttributes: attributes)
-        if selected { ("✓" as NSString).draw(at: NSPoint(x: bounds.width - 18, y: bounds.height - 21), withAttributes: [.font: NSFont.systemFont(ofSize: 11, weight: .bold), .foregroundColor: NSColor(hex: 0x123E6A)]) }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(hex: 0x574A50)]
+        let text = theme.title as NSString, size = text.size(withAttributes: attributes)
+        text.draw(at: NSPoint(x: dp(101), y: bounds.midY - size.height / 2 - 0.5), withAttributes: attributes)
+        let heart = AquaStyle.heart(in: NSRect(x: dp(319), y: bounds.midY - dp(9), width: dp(20), height: dp(18)).insetBy(dx: 0.5, dy: 0.5))
+        heart.lineJoinStyle = .round
+        if selected {
+            AquaStyle.jelly(heart, rim: NSColor(hex: 0xB65D89))
+        } else {
+            NSColor(hex: 0xF7F5F6).setFill(); heart.fill()
+            NSColor(hex: 0xE2DADF).setStroke(); heart.lineWidth = 1; heart.stroke()
+        }
+    }
+}
+
+// Classic Aqua scroller: arrow caps, a recessed slot and a pink jelly thumb.
+final class AquaScroller: NSScroller {
+    override class var isCompatibleWithOverlayScrollers: Bool { false }
+    override class func scrollerWidth(for controlSize: NSControl.ControlSize, scrollerStyle: NSScroller.Style) -> CGFloat { dp(19) }
+    private var slot: NSRect { NSRect(x: 0, y: dp(23), width: bounds.width, height: max(0, bounds.height - dp(23) - dp(23))) }
+    override func rect(for part: NSScroller.Part) -> NSRect {
+        switch part {
+        case .knobSlot: return slot
+        case .knob:
+            guard knobProportion > 0, knobProportion < 1, isEnabled else { return .zero }
+            let length = max(dp(60), slot.height * knobProportion)
+            return NSRect(x: slot.minX, y: slot.minY + (slot.height - length) * doubleValue, width: slot.width, height: length)
+        default: return super.rect(for: part)
+        }
+    }
+    override func draw(_ dirtyRect: NSRect) {
+        NSColor.white.setFill(); bounds.fill()
+        AquaStyle.line.setFill(); NSRect(x: 0, y: 0, width: dp(1), height: bounds.height).fill()
+        let track = NSBezierPath(roundedRect: slot.insetBy(dx: 1, dy: -0.5).offsetBy(dx: 0.5, dy: 0), xRadius: slot.width / 2 - 1, yRadius: slot.width / 2 - 1)
+        NSColor(hex: 0xF7F6F6).setFill(); track.fill()
+        AquaStyle.line.setStroke(); track.lineWidth = 1; track.stroke()
+        AquaStyle.soft.setFill()
+        let mid = bounds.midX + dp(0.5), w = dp(9), h = dp(8)
+        for (tip, base) in [(dp(9), dp(9) + h), (bounds.height - dp(8), bounds.height - dp(8) - h)] {
+            let arrow = NSBezierPath()
+            arrow.move(to: NSPoint(x: mid, y: tip)); arrow.line(to: NSPoint(x: mid + w / 2, y: base)); arrow.line(to: NSPoint(x: mid - w / 2, y: base))
+            arrow.close(); arrow.fill()
+        }
+        drawKnob()
+    }
+    override func drawKnob() {
+        let rect = self.rect(for: .knob)
+        guard !rect.isEmpty else { return }
+        let r = rect.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: r, xRadius: r.width / 2, yRadius: r.width / 2)
+        AquaStyle.gradient([0xDF74A9, 0xFFE3F1, 0xFFC6E2, 0xFFB6DB, 0xFFD2E8, 0xDEB2C7], [0, 0.12, 0.3, 0.48, 0.75, 1]).draw(in: path, angle: 0)
+        AquaStyle.pinkRim.setStroke(); path.lineWidth = 1; path.stroke()
+    }
+}
+
+// Flat translucent pill; its own layer keeps the 30 Hz preview from redrawing the text.
+final class FlatPill: NSButton {
+    init(title: String, symbol: String, target: AnyObject, action: Selector) {
+        super.init(frame: .zero)
+        self.title = title; self.target = target; self.action = action
+        isBordered = false; wantsLayer = true; setAccessibilityLabel(title)
+        image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)?.withSymbolConfiguration(.init(pointSize: 8.5, weight: .regular))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds, xRadius: bounds.height / 2, yRadius: bounds.height / 2)
+        NSColor(hex: 0xEFEBED).withAlphaComponent(isHighlighted ? 1 : 0.94).setFill(); path.fill()
+        if isHighlighted { NSColor(hex: 0x6B4A5B).withAlphaComponent(0.08).setFill(); path.fill() }
+        if let image {
+            let tinted = NSImage(size: image.size, flipped: false) { rect in
+                image.draw(in: rect); AquaStyle.soft.set(); rect.fill(using: .sourceAtop); return true
+            }
+            tinted.draw(in: NSRect(x: dp(20), y: bounds.midY - image.size.height / 2, width: image.size.width, height: image.size.height))
+        }
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 9), .foregroundColor: AquaStyle.soft]
+        let size = (title as NSString).size(withAttributes: attributes)
+        (title as NSString).draw(at: NSPoint(x: dp(46), y: bounds.midY - size.height / 2), withAttributes: attributes)
+    }
+}
+
+// Status line that doubles as the on/off switch for the desktop overlay.
+final class StatusButton: NSButton {
+    var on = true { didSet { title = on ? "桌面效果已开启" : "桌面效果已暂停"; needsDisplay = true } }
+    init(target: AnyObject, action: Selector) {
+        super.init(frame: .zero)
+        self.target = target; self.action = action; isBordered = false; title = "桌面效果已开启"
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override func draw(_ dirtyRect: NSRect) {
+        let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: isHighlighted ? AquaStyle.pinkRim : AquaStyle.soft]
+        let text = title as NSString, size = text.size(withAttributes: attributes)
+        let x = bounds.maxX - size.width - 2
+        text.draw(at: NSPoint(x: x, y: bounds.midY - size.height / 2), withAttributes: attributes)
+        let d = dp(16), dot = NSBezierPath(ovalIn: NSRect(x: x - dp(11) - d, y: bounds.midY - d / 2, width: d, height: d).insetBy(dx: 0.5, dy: 0.5))
+        if on { NSColor(hex: 0xFFBADC).setFill(); dot.fill(); AquaStyle.pinkRim.setStroke() }
+        else { NSColor(hex: 0xEDE9EB).setFill(); dot.fill(); AquaStyle.rim.setStroke() }
+        dot.lineWidth = 1; dot.stroke()
+    }
+}
+
+// One tuning parameter: name, live value, pink Aqua slider and tick marks, in design units.
+final class SliderCard: NSView {
+    let slider: NSSlider
+    let value = label("", 12)
+    init(frame: NSRect, name: String, range: (Double, Double), tag: Int, target: AnyObject, action: Selector) {
+        slider = NSSlider(value: range.0, minValue: range.0, maxValue: range.1, target: target, action: action)
+        super.init(frame: frame)
+        slider.tag = tag; slider.isContinuous = true; slider.setAccessibilityLabel(name)
+        slider.frame = NSRect(x: dp(20), y: dp(50), width: frame.width - dp(40), height: AquaSliderCell.knob.height)
+        let title = label(name, 12)
+        place(title, x: 21, centerY: 27)
+        value.alignment = .right
+        place(value, x: frame.width * 1.5 - 22, centerY: 32, trailing: true, width: 80)
+        [title, value, slider].forEach(addSubview)
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 7, yRadius: 7)
+        NSColor.white.setFill(); path.fill()
+        NSColor(hex: 0xE2DBDF).setStroke(); path.lineWidth = 1; path.stroke()
+        NSColor(hex: 0xE2DBDF).setFill()
+        let first = dp(22), span = bounds.width - dp(44)
+        for i in 0...8 { NSRect(x: (first + span * CGFloat(i) / 8).rounded(), y: dp(77), width: 1, height: dp(3)).fill() }
     }
 }
 
@@ -136,38 +254,14 @@ final class PreviewView: NSView {
     let settings: TrailSettings
     let painter: ParticlePainter
     let system = ParticleSystem()
-    var light = true { didSet { updateCaption(); needsDisplay = true } }
-    private let heading = NSTextField(labelWithString: "LIVE PREVIEW")
-    private let caption = NSTextField(labelWithString: "")
+    var light = true { didSet { needsDisplay = true } }
     var point = CGPoint.zero
     init(frame: NSRect, settings: TrailSettings, painter: ParticlePainter) {
         self.settings = settings; self.painter = painter
         super.init(frame: frame)
-        // Keep text out of the 30 Hz NSString drawing path. CoreText raised an
-        // NSInvalidArgumentException while copying its attributes on macOS 26.
-        heading.font = .monospacedSystemFont(ofSize: 9, weight: .medium)
-        caption.font = .systemFont(ofSize: 11)
-        for field in [heading, caption] {
-            field.isSelectable = false
-            field.wantsLayer = true
-            addSubview(field)
-        }
-        updateCaption()
     }
     required init?(coder: NSCoder) { fatalError() }
-    override func layout() {
-        super.layout()
-        heading.frame = NSRect(x: 20, y: bounds.height - 32, width: max(0, bounds.width - 40), height: 16)
-        caption.frame = NSRect(x: 20, y: 14, width: max(0, bounds.width - 40), height: 18)
-    }
-    func updateCaption() {
-        let text = settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停"
-        if caption.stringValue != text { caption.stringValue = text }
-        let ink = light ? NSColor(hex: 0x34556F) : NSColor(hex: 0xC2DCEA)
-        for field in [heading, caption] where field.textColor != ink { field.textColor = ink }
-    }
     func step() {
-        updateCaption()
         let t = ProcessInfo.processInfo.systemUptime
         // A moving loop followed by a pause shows the trail fading naturally.
         let phase = min(t.truncatingRemainder(dividingBy: 5), 3.2) / 3.2 * 2 * Double.pi
@@ -176,33 +270,34 @@ final class PreviewView: NSView {
         system.tick(at: t, cursor: settings.enabled ? point : nil, settings: settings)
         needsDisplay = true
     }
+    // Pink arrow in points, tip first, y growing downwards from the hotspot.
+    static let arrow: [CGPoint] = [(0, 0), (0, 16.4), (3.9, 12.8), (6.5, 18.6), (9, 17.6), (6.5, 11.8), (11.6, 11.8)].map { CGPoint(x: $0.0, y: $0.1) }
     override func draw(_ dirtyRect: NSRect) {
         guard let ctx = NSGraphicsContext.current?.cgContext else { return }
         NSGraphicsContext.saveGraphicsState()
-        NSBezierPath(roundedRect: bounds.insetBy(dx: 3, dy: 3), xRadius: 8, yRadius: 8).addClip()
-        let top = light ? NSColor(hex: 0x56B9EA) : NSColor(hex: 0x264D70)
-        let bottom = light ? NSColor(hex: 0xDFF5F5) : NSColor(hex: 0x081E34)
-        NSGradient(starting: bottom, ending: top)?.draw(in: bounds, angle: 90)
-        if light { AeroScenery.landscape(in: bounds) }
-        (light ? NSColor.black : NSColor.white).withAlphaComponent(0.025).setFill()
-        for x in stride(from: 18, to: Int(bounds.width), by: 24) {
-            for y in stride(from: 15, to: Int(bounds.height), by: 24) { NSBezierPath(ovalIn: NSRect(x: CGFloat(x), y: CGFloat(y), width: 1.5, height: 1.5)).fill() }
+        // Only the bottom corners are rounded; the panel header sits above.
+        let r: CGFloat = 6.5, clip = NSBezierPath()
+        clip.move(to: NSPoint(x: 0, y: bounds.maxY)); clip.line(to: NSPoint(x: 0, y: r))
+        clip.appendArc(withCenter: NSPoint(x: r, y: r), radius: r, startAngle: 180, endAngle: 270)
+        clip.appendArc(withCenter: NSPoint(x: bounds.maxX - r, y: r), radius: r, startAngle: 270, endAngle: 360)
+        clip.line(to: NSPoint(x: bounds.maxX, y: bounds.maxY)); clip.close(); clip.addClip()
+        // Pinstripes brighten towards pink at the bottom, like the classic Aqua window fill.
+        (light ? NSColor(hex: 0xF7F5F6) : NSColor(hex: 0x2A1F28)).setFill(); bounds.fill()
+        let topStripe = light ? NSColor(hex: 0xFFFDFE) : NSColor(hex: 0x33263A)
+        let bottomStripe = light ? NSColor(hex: 0xFFF1F8) : NSColor(hex: 0x40283A)
+        for y in stride(from: bounds.height - 1.5, through: -1.5, by: -3) {
+            topStripe.blended(withFraction: 1 - y / bounds.height, of: bottomStripe)!.setFill()
+            NSRect(x: 0, y: y, width: bounds.width, height: 1.5).fill()
         }
         painter.draw(system.particles, in: ctx, at: ProcessInfo.processInfo.systemUptime, twinkleSpeed: settings.twinkleSpeed)
-        // Use the system arrow at its native point size, including its outline and shadow.
-        let cursor = NSCursor.arrow
-        let image = cursor.image
-        // Cursor hotspots are measured from the top left; this view uses bottom-left coordinates.
-        image.draw(in: NSRect(x: point.x - cursor.hotSpot.x,
-                              y: point.y - (image.size.height - cursor.hotSpot.y),
-                              width: image.size.width, height: image.size.height),
-                   from: .zero, operation: .sourceOver, fraction: 1,
-                   respectFlipped: true, hints: nil)
+        let arrow = NSBezierPath()
+        for (i, p) in Self.arrow.enumerated() {
+            let q = NSPoint(x: point.x + p.x * 1.15, y: point.y - p.y * 1.15)
+            if i == 0 { arrow.move(to: q) } else { arrow.line(to: q) }
+        }
+        arrow.close(); arrow.lineJoinStyle = .round; arrow.lineWidth = 1.2
+        NSColor(hex: 0xFF7DBE).setFill(); NSColor(hex: 0xFF7DBE).setStroke(); arrow.fill(); arrow.stroke()
         NSGraphicsContext.restoreGraphicsState()
-        let rim = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 9, yRadius: 9)
-        NSColor(hex: 0x778997).setStroke(); rim.lineWidth = 3; rim.stroke()
-        let inner = NSBezierPath(roundedRect: bounds.insetBy(dx: 4, dy: 4), xRadius: 7, yRadius: 7)
-        NSColor.white.withAlphaComponent(0.5).setStroke(); inner.lineWidth = 1; inner.stroke()
     }
 }
 
@@ -219,14 +314,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var settingsWindow: NSWindow!
     var preview: PreviewView!
-    var themeButtons: [ThemeButton] = []
+    var themeButtons: [ThemeRow] = []
     var sliders: [NSSlider] = []
     var valueLabels: [NSTextField] = []
-    var enableButton: NSButton!
+    var enableButton: StatusButton!
     var burstButton: NSButton!
     var hotKey: EventHotKeyRef?
     var eventHandler: EventHandlerRef?
-    var shortcutLabel: NSTextField!
     var suspended = false
     var previousButtons = 0
 
@@ -304,7 +398,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return noErr
         }, 1, &type, pointer, &eventHandler)
         let status = RegisterEventHotKey(UInt32(kVK_ANSI_S), UInt32(cmdKey | shiftKey), EventHotKeyID(signature: 0x4C554D41, id: 1), GetApplicationEventTarget(), 0, &hotKey)
-        shortcutLabel.stringValue = status == noErr ? "⌘ ⇧ S  随时暂停 / 开启" : "快捷键被占用，请从菜单栏暂停"
+        enableButton.toolTip = status == noErr ? "点击或按 ⌘ ⇧ S 随时暂停 / 开启" : "快捷键被占用，请点击这里或从菜单栏暂停"
     }
     func buildOverlays() {
         panels.forEach { $0.orderOut(nil) }; panels.removeAll(); system.reset()
@@ -362,13 +456,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             timer?.invalidate(); timer = nil; timerHz = 0; panels.forEach { $0.orderOut(nil) }
         }
-        enableButton?.title = settings.enabled ? "●  桌面效果已开启" : "开启桌面效果"
-        buildStatusMenu(); preview?.updateCaption(); preview?.needsDisplay = true
+        enableButton?.on = settings.enabled
+        buildStatusMenu(); preview?.needsDisplay = true
     }
     @objc func showCursorAppearance() { cursorAppearance?.show() }
     @objc func showFolderIcons() { folderIcons.show() }
     @objc func showSettings() { settingsWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
-    @objc func chooseTheme(_ sender: ThemeButton) {
+    @objc func chooseTheme(_ sender: ThemeRow) {
         if sender.theme == .custom && settings.customData == nil { importImage(); return }
         setTheme(sender.theme)
     }
@@ -406,7 +500,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         DispatchQueue.main.async { [weak self] in self?.showSettings() }
     }
     @objc func toggleBurst(_ sender: NSButton) { settings.clickBurst = sender.state == .on; settings.save() }
-    @objc func toggleBackground(_ sender: NSButton) { preview.light.toggle(); sender.title = preview.light ? "深色背景" : "浅色背景"; preview.needsDisplay = true }
+    @objc func toggleBackground(_ sender: NSButton) { preview.light.toggle() }
     @objc func resetParameters() {
         settings.size = 19; settings.density = 0.8; settings.lifetime = 1.25; settings.opacity = 0.88; settings.twinkleSpeed = 1.8; settings.clickBurst = true
         settings.save(); updateValues(); clear()
@@ -435,89 +529,98 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func buildWindow() {
-        settingsWindow = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 820, height: 690), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
+        // Every frame below quotes the 1.5× design mockup, whose window starts at (99, 74).
+        let size = NSSize(width: dp(1341), height: dp(1182))
+        settingsWindow = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         settingsWindow.title = "Luma Trail"; settingsWindow.isReleasedWhenClosed = false
         settingsWindow.titleVisibility = .hidden
-        settingsWindow.titlebarAppearsTransparent = true; settingsWindow.backgroundColor = NSColor(hex: 0xEDF1F4)
+        settingsWindow.titlebarAppearsTransparent = true; settingsWindow.backgroundColor = AquaStyle.background
         settingsWindow.appearance = NSAppearance(named: .aqua); settingsWindow.center()
         for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
             settingsWindow.standardWindowButton(kind)?.isHidden = true
         }
-        let content = Surface(frame: NSRect(x: 0, y: 0, width: 820, height: 690))
-        settingsWindow.contentView = content
-        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 820, height: 40))
-        content.addSubview(header)
-        let controls: [(Int, String, Selector?)] = [
-            (0xE85B52, "关闭", #selector(NSWindow.performClose(_:))),
-            (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:))),
-            (0x68B751, "缩放（此窗口为固定尺寸）", nil)
+        let root = Surface(frame: NSRect(origin: .zero, size: size))
+        settingsWindow.contentView = root
+        func frame(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect { NSRect(x: dp(x - 99), y: dp(y - 74), width: dp(w), height: dp(h)) }
+        func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = frame(x, y, w, h); root.addSubview(view) }
+        func text(_ field: NSTextField, _ x: CGFloat, _ centerY: CGFloat) { place(field, x: x - 99, centerY: centerY - 74); root.addSubview(field) }
+
+        let header = AquaTitlebar(); header.title = "给鼠标加一点魔法"; header.symbol = "heart"
+        put(header, 99, 74, 1341, 42)
+        let controls: [(Int, Int, String, Selector?)] = [
+            (0xF5A798, 0x9C3C25, "关闭", #selector(NSWindow.performClose(_:))),
+            (0xFBD689, 0xA5790A, "最小化", #selector(NSWindow.performMiniaturize(_:))),
+            (0x9FDDC3, 0x1D7D58, "缩放（此窗口为固定尺寸）", nil)
         ]
         for (index, control) in controls.enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: control.0), title: control.1, target: settingsWindow, action: control.2)
-            button.frame = NSRect(x: 13 + CGFloat(index) * 28, y: 7, width: 26, height: 26)
-            button.isEnabled = control.2 != nil
+            let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), title: control.2, target: settingsWindow, action: control.3)
+            button.frame = NSRect(x: dp(24.5 + CGFloat(index) * 27) - 8, y: dp(21) - 8, width: 16, height: 16)
+            button.isEnabled = control.3 != nil
             header.addSubview(button)
         }
-        let root = Surface(frame: NSRect(x: 0, y: 40, width: 820, height: 650)); content.addSubview(root)
-        func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = NSRect(x: x, y: y, width: w, height: h); root.addSubview(view) }
-        put(AquaGroup(), 18, 96, 280, 490)
-        put(AquaGroup(), 300, 342, 501, 244)
-        put(label("Luma Trail", 26, .bold), 28, 17, 400, 42)
-        put(label("给每一次移动，添一点小小的魔法。", 13, .regular, NSColor(hex: 0x526D82)), 29, 65, 430, 21)
-        put(label("选择心情", 12, .semibold), 29, 105, 240, 20)
+        put(BannerView(), 120, 136, 1300, 140)
+        let dragTab = NSButton(title: "拖动效果", target: nil, action: nil)
+        dragTab.identifier = NSUserInterfaceItemIdentifier("aquaTabOn")
+        let cursorTab = NSButton(title: "鼠标美化", target: self, action: #selector(showCursorAppearance))
+        cursorTab.identifier = NSUserInterfaceItemIdentifier("aquaTab")
+        for (i, tab) in [dragTab, cursorTab].enumerated() { tab.font = .systemFont(ofSize: 13); put(tab, 600 + CGFloat(i) * 180, 296, 160, 45) }
+
+        // Effect library.
+        put(AquaGroup(title: "效果库"), 120, 360, 380, 828)
         let themes = TrailTheme.displayOrder
-        let rows = (themes.count + 1) / 2
-        let board = ThemeBoard(frame: NSRect(x: 0, y: 0, width: 248, height: CGFloat(rows) * 52))
+        let board = ThemeBoard(frame: NSRect(x: 0, y: 0, width: dp(359), height: CGFloat(themes.count) * ThemeRow.height))
         for (i, theme) in themes.enumerated() {
-            let button = ThemeButton(theme: theme, target: self, action: #selector(chooseTheme(_:)))
-            button.selected = settings.theme == theme; themeButtons.append(button)
-            button.toolTip = theme.subtitle
-            button.frame = NSRect(x: CGFloat(i % 2) * 128, y: CGFloat(i / 2) * 52, width: 120, height: 50)
-            board.addSubview(button)
+            let row = ThemeRow(theme: theme, target: self, action: #selector(chooseTheme(_:)))
+            row.selected = settings.theme == theme; themeButtons.append(row)
+            row.toolTip = theme.subtitle
+            row.frame = NSRect(x: 0, y: CGFloat(i) * ThemeRow.height, width: board.frame.width, height: ThemeRow.height)
+            board.addSubview(row)
         }
         let scroller = NSScrollView(frame: .zero)
-        scroller.drawsBackground = false; scroller.hasVerticalScroller = true; scroller.borderType = .bezelBorder; scroller.scrollerStyle = .legacy
-        scroller.documentView = board; scroller.autohidesScrollers = true
-        put(scroller, 28, 132, 264, 328)
-        let importButton = NSButton(title: "导入自己的图片…", target: self, action: #selector(importImage))
-        importButton.bezelStyle = .rounded; put(importButton, 42, 472, 220, 30)
-        let cursorButton = NSButton(title: "鼠标外观与状态图片…", target: self, action: #selector(showCursorAppearance))
-        cursorButton.bezelStyle = .rounded; put(cursorButton, 42, 547, 220, 30)
-        put(label("透明 PNG 最佳 · 图片只保存在本机", 10, .regular, NSColor(hex: 0x526D82)), 42, 509, 240, 20)
+        scroller.verticalScroller = AquaScroller()
+        scroller.scrollerStyle = .legacy; scroller.hasVerticalScroller = true; scroller.autohidesScrollers = false
+        scroller.borderType = .noBorder; scroller.backgroundColor = .white; scroller.documentView = board
+        put(scroller, 121, 402, 378, 659)
+        let divider = NSBox(); divider.boxType = .custom; divider.borderWidth = 0; divider.fillColor = AquaStyle.line
+        put(divider, 121, 1061, 378, 1)
+        let importButton = NSButton(title: "导入自定义图片…", target: self, action: #selector(importImage))
+        importButton.font = .systemFont(ofSize: 12); put(importButton, 140, 1091, 340, 41)
+        let caption = label("透明 PNG 最佳 · 图片只存在本机", 9, .regular, AquaStyle.soft)
+        caption.sizeToFit(); text(caption, 310 - caption.frame.width * 0.75, 1149)
+
+        // Live preview.
+        put(AquaGroup(title: "效果预览"), 520, 360, 900, 330)
         preview = PreviewView(frame: .zero, settings: settings, painter: painter)
-        put(preview, 306, 105, 486, 230)
-        let background = NSButton(title: "深色背景", target: self, action: #selector(toggleBackground(_:)))
-        background.bezelStyle = .rounded; background.controlSize = .small; put(background, 699, 68, 94, 25)
+        put(preview, 521, 402, 898, 287)
+        put(FlatPill(title: "切换背景", symbol: "arrow.triangle.2.circlepath", target: self, action: #selector(toggleBackground(_:))), 550, 421, 120, 40)
+
+        // Tuning cards: two per row, the fifth spanning the panel.
+        put(AquaGroup(title: "效果调节"), 520, 709, 900, 481)
         let names = ["粒子大小", "闪光密度", "消散时间", "闪烁速度", "不透明度"]
         let ranges: [(Double, Double)] = [(8, 42), (0.25, 1.8), (0.4, 2.5), (0.2, 4), (0.25, 1)]
         for i in 0..<5 {
-            let y = CGFloat(356 + i * 37)
-            put(label(names[i], 12), 308, y + 2, 84, 22)
-            let slider = NSSlider(value: 0, minValue: ranges[i].0, maxValue: ranges[i].1, target: self, action: #selector(parameterChanged(_:)))
-            slider.tag = i; slider.isContinuous = true; slider.setAccessibilityLabel(names[i]); sliders.append(slider)
-            put(slider, 398, y, 328, 25)
-            let value = label("", 11, .medium, NSColor(hex: 0x315D85)); value.alignment = .right; valueLabels.append(value)
-            put(value, 733, y + 3, 57, 20)
+            let rect = frame(540 + CGFloat(i % 2) * 440, 771 + CGFloat(i / 2) * 120, i == 4 ? 860 : 420, 100)
+            let card = SliderCard(frame: rect, name: names[i], range: ranges[i], tag: i, target: self, action: #selector(parameterChanged(_:)))
+            sliders.append(card.slider); valueLabels.append(card.value); root.addSubview(card)
         }
-        burstButton = NSButton(checkboxWithTitle: "点击时绽放一小簇", target: self, action: #selector(toggleBurst(_:)))
+        let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetParameters))
+        reset.font = .systemFont(ofSize: 12); put(reset, 540, 1131, 132, 41)
+        burstButton = NSButton(checkboxWithTitle: "点击绽放效果", target: self, action: #selector(toggleBurst(_:)))
         burstButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
-        burstButton.font = .systemFont(ofSize: 12); put(burstButton, 308, 549, 220, 24)
-        let reset = NSButton(title: "恢复默认参数", target: self, action: #selector(resetParameters)); reset.bezelStyle = .rounded; reset.controlSize = .small
-        put(reset, 668, 547, 124, 27)
-        let line = NSBox(); line.boxType = .separator; put(line, 28, 590, 764, 1)
-        shortcutLabel = label("⌘ ⇧ S  随时暂停 / 开启", 11, .regular, NSColor(hex: 0x526D82)); put(shortcutLabel, 29, 611, 325, 20)
+        burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
+
+        // Footer.
         let dockButton = NSButton(checkboxWithTitle: "在 Dock 中显示", target: self, action: #selector(toggleDockVisibility(_:)))
         dockButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         dockButton.font = .systemFont(ofSize: 12)
         dockButton.state = UserDefaults.standard.bool(forKey: "showInDock") ? .on : .off
-        put(dockButton, 375, 607, 175, 24)
-        enableButton = NSButton(title: "", target: self, action: #selector(toggleEnabled))
-        enableButton.bezelStyle = .rounded; enableButton.contentTintColor = NSColor(hex: 0x826197)
-        put(enableButton, 565, 603, 157, 32)
-        let quit = NSButton(title: "退出", target: NSApp, action: #selector(NSApplication.terminate(_:)))
-        quit.bezelStyle = .rounded; put(quit, 735, 603, 59, 32)
-        AquaStyle.install(in: content)
+        put(dockButton, 139.5, 1207, 180, 28)
+        enableButton = StatusButton(target: self, action: #selector(toggleEnabled))
+        enableButton.on = settings.enabled
+        put(enableButton, 1230, 1207, 172, 30)
+        AquaStyle.install(in: root)
         updateValues()
+        if let selected = themeButtons.first(where: \.selected) { board.scrollToVisible(selected.frame.insetBy(dx: 0, dy: -ThemeRow.height)) }
     }
 }
 
@@ -539,10 +642,7 @@ func runPreviewStressTest() {
                 settings.theme = TrailTheme.displayOrder[(frame / 120) % TrailTheme.displayOrder.count]
             }
             preview.step()
-            preview.layoutSubtreeIfNeeded()
-            let labels = preview.subviews.compactMap { $0 as? NSTextField }
-            precondition(labels.count == 2 && labels.allSatisfy { $0.frame.height > 0 })
-            precondition(labels.last?.stringValue == (settings.enabled ? "移动时亮片散开，停下后自然消失" : "桌面效果已暂停"))
+            precondition(preview.bounds.insetBy(dx: -1, dy: -1).contains(preview.point))
             preview.display()
             RunLoop.main.run(until: Date(timeIntervalSinceNow: 1.0 / 240))
         }
@@ -557,7 +657,6 @@ if CommandLine.arguments.contains("--preview-stress-test") {
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-settings"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
     let delegate = AppDelegate(); delegate.buildWindow()
-    delegate.enableButton.title = "●  桌面效果已开启"
     delegate.preview.step()
     let view = delegate.settingsWindow.contentView!
     view.display()

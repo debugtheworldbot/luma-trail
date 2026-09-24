@@ -14,6 +14,7 @@ xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
   Sources/TrailFestive.swift Sources/TrailInk.swift Sources/TrailPaths.swift Sources/Particles.swift Sources/main.swift \
   -o "$APP/Contents/MacOS/LumaTrail"
 cp Info.plist "$APP/Contents/Info.plist"
+cp Assets/SettingsBanner.png "$APP/Contents/Resources/SettingsBanner.png"
 ICONSET="$STAGING/AppIcon.iconset"
 mkdir -p "$ICONSET"
 for size in 16 32 128 256 512; do

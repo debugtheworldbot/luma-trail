@@ -1,23 +1,70 @@
 import AppKit
 
-// Shared Aqua drawing keeps native control tracking, keyboard actions and accessibility.
-enum AquaStyle {
-    static let blue = NSColor(hex: 0x2879CD)
-    static let ink = NSColor(hex: 0x243D54)
+// The settings mockup is drawn at 1.5× points; layouts quote its pixels and convert once here.
+func dp(_ value: CGFloat) -> CGFloat { value / 1.5 }
 
-    static func glass(_ rect: NSRect, blue: Bool = false, pressed: Bool = false, radius: CGFloat = 9) {
+// Places a label by the design-space centre of its glyphs; x is the leading (or trailing) glyph edge.
+func place(_ field: NSTextField, x: CGFloat, centerY: CGFloat, trailing: Bool = false, width: CGFloat? = nil) {
+    field.sizeToFit()
+    let w = width ?? field.frame.width, h = field.frame.height
+    field.frame = NSRect(x: trailing ? dp(x) - w + 2 : dp(x) - 2, y: dp(centerY) - h / 2, width: w, height: h)
+}
+
+// Shared pink Aqua drawing keeps native control tracking, keyboard actions and accessibility.
+enum AquaStyle {
+    static let ink = NSColor(hex: 0x251F23)
+    static let soft = NSColor(hex: 0xAD94A0)
+    static let line = NSColor(hex: 0xCDBFC6)
+    static let rim = NSColor(hex: 0x9B8691)
+    static let pinkRim = NSColor(hex: 0xAB537E)
+    static let background = NSColor(hex: 0xF7F5F6)
+
+    static let whiteGloss = gradient([0xFEFDFE, 0xF5F4F5, 0xEAE5E8, 0xEDE9EB, 0xF5F2F3, 0xFDFCFC], [0, 0.22, 0.42, 0.5, 0.72, 1])
+    static let pinkGloss = gradient([0xFFE5F2, 0xFFCBE5, 0xFFB3D8, 0xFFBEDE, 0xFFD5E9, 0xFFEDF5], [0, 0.22, 0.42, 0.52, 0.75, 1])
+    static let header = gradient([0xFEFEFE, 0xF7F5F6, 0xEFEBED], [0, 0.5, 1])
+
+    static func gradient(_ colors: [Int], _ stops: [CGFloat]) -> NSGradient {
+        var locations = stops
+        return NSGradient(colors: colors.map { NSColor(hex: $0) }, atLocations: &locations, colorSpace: .sRGB)!
+    }
+
+    // Draws in unflipped coordinates, gloss running from the top edge down over a hairline shadow.
+    static func glass(_ rect: NSRect, pink: Bool = false, pressed: Bool = false, radius: CGFloat = 4, rim border: NSColor? = nil) {
         let path = NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius)
         NSGraphicsContext.saveGraphicsState()
-        let shadow = NSShadow(); shadow.shadowColor = .black.withAlphaComponent(0.23)
-        shadow.shadowBlurRadius = 2; shadow.shadowOffset = NSSize(width: 0, height: -1)
+        let shadow = NSShadow(); shadow.shadowColor = line
+        shadow.shadowBlurRadius = 0; shadow.shadowOffset = NSSize(width: 0, height: -1)
         shadow.set(); NSColor.white.setFill(); path.fill()
         NSGraphicsContext.restoreGraphicsState()
-        let colors = blue ? [0xB6EEFF, 0x439CE8, 0x176AC3, 0xD5F3FF] : [0xFFFFFF, 0xD6EEF2, 0xB2CED9, 0xFFFFFF]
-        NSGradient(colors: colors.map { NSColor(hex: $0) })?.draw(in: path, angle: 90)
-        if pressed { NSColor(hex: 0x174979).withAlphaComponent(0.22).setFill(); path.fill() }
-        let gleam = NSBezierPath(roundedRect: NSRect(x: rect.minX + 2, y: rect.midY, width: rect.width - 4, height: rect.height / 2 - 1), xRadius: radius - 2, yRadius: radius - 2)
-        NSGradient(starting: .white.withAlphaComponent(0.15), ending: .white.withAlphaComponent(0.85))?.draw(in: gleam, angle: 90)
-        (blue ? NSColor(hex: 0x316AA5) : NSColor(hex: 0x8998A5)).setStroke(); path.lineWidth = 1; path.stroke()
+        (pink ? pinkGloss : whiteGloss).draw(in: path, angle: -90)
+        if pressed { NSColor(hex: 0x6B4A5B).withAlphaComponent(0.14).setFill(); path.fill() }
+        (border ?? (pink ? pinkRim : rim)).setStroke(); path.lineWidth = 1; path.stroke()
+    }
+
+    static func jelly(_ path: NSBezierPath, flipped: Bool = false, rim border: NSColor = pinkRim) {
+        pinkGloss.draw(in: path, angle: flipped ? 90 : -90)
+        border.setStroke(); path.lineWidth = 1; path.stroke()
+    }
+
+    // Unflipped heart with its tip at the bottom of the rect.
+    static func heart(in r: NSRect) -> NSBezierPath {
+        let p = NSBezierPath(), x = r.minX, y = r.minY, w = r.width, h = r.height
+        p.move(to: NSPoint(x: x + w / 2, y: y))
+        p.curve(to: NSPoint(x: x, y: y + h * 0.66), controlPoint1: NSPoint(x: x + w * 0.36, y: y + h * 0.2), controlPoint2: NSPoint(x: x, y: y + h * 0.42))
+        p.curve(to: NSPoint(x: x + w / 2, y: y + h * 0.8), controlPoint1: NSPoint(x: x, y: y + h * 1.04), controlPoint2: NSPoint(x: x + w * 0.44, y: y + h * 1.06))
+        p.curve(to: NSPoint(x: x + w, y: y + h * 0.66), controlPoint1: NSPoint(x: x + w * 0.56, y: y + h * 1.06), controlPoint2: NSPoint(x: x + w, y: y + h * 1.04))
+        p.curve(to: NSPoint(x: x + w / 2, y: y), controlPoint1: NSPoint(x: x + w, y: y + h * 0.42), controlPoint2: NSPoint(x: x + w * 0.64, y: y + h * 0.2))
+        p.close(); return p
+    }
+
+    // Four-point star with concave sides, symmetric so it reads the same flipped or not.
+    static func sparkle(in r: NSRect) -> NSBezierPath {
+        let c = NSPoint(x: r.midX, y: r.midY), k: CGFloat = 0.4
+        let tips = [NSPoint(x: c.x, y: r.maxY), NSPoint(x: r.maxX, y: c.y), NSPoint(x: c.x, y: r.minY), NSPoint(x: r.minX, y: c.y)]
+        func pull(_ p: NSPoint) -> NSPoint { NSPoint(x: c.x + (p.x - c.x) * k, y: c.y + (p.y - c.y) * k) }
+        let p = NSBezierPath(); p.move(to: tips[0])
+        for i in 0..<4 { let a = tips[i], b = tips[(i + 1) % 4]; p.curve(to: b, controlPoint1: pull(a), controlPoint2: pull(b)) }
+        p.close(); return p
     }
 
     static func install(in view: NSView) {
@@ -33,13 +80,16 @@ enum AquaStyle {
                 let target = popup.target, action = popup.action
                 popup.cell = AquaPopupCell(textCell: "", pullsDown: false)
                 popup.menu = menu; popup.selectItem(at: selected); popup.target = target; popup.action = action
-            } else if let button = child as? NSButton, !(button is ThemeButton), !(button is AquaWindowButton) {
+            } else if let button = child as? NSButton, type(of: button) == NSButton.self {
+                // Custom-drawn NSButton subclasses keep their own appearance.
                 let title = button.title, state = button.state, font = button.font
                 let target = button.target, action = button.action
-                let checkbox = button.identifier?.rawValue == "aquaCheckbox"
+                let kind = button.identifier?.rawValue ?? ""
                 let cell = AquaButtonCell(textCell: title)
-                cell.checkbox = checkbox
-                cell.setButtonType(checkbox ? .switch : .momentaryPushIn)
+                cell.checkbox = kind == "aquaCheckbox"
+                cell.tab = kind.hasPrefix("aquaTab")
+                cell.pink = kind == "aquaTabOn" || title.contains("开启") || title.contains("应用")
+                cell.setButtonType(cell.checkbox ? .switch : .momentaryPushIn)
                 button.cell = cell; button.title = title; button.state = state; button.font = font
                 button.target = target; button.action = action
             }
@@ -49,7 +99,7 @@ enum AquaStyle {
 }
 
 final class AquaButtonCell: NSButtonCell {
-    var checkbox = false
+    var checkbox = false, tab = false, pink = false
     override func draw(withFrame frame: NSRect, in view: NSView) {
         // Draw in an unflipped coordinate system for consistent top highlights.
         NSGraphicsContext.saveGraphicsState()
@@ -57,39 +107,64 @@ final class AquaButtonCell: NSButtonCell {
             var transform = AffineTransform(translationByX: 0, byY: frame.minY + frame.maxY)
             transform.scale(x: 1, y: -1); (transform as NSAffineTransform).concat()
         }
-        let rect = checkbox ? NSRect(x: frame.minX + 2, y: frame.midY - 7, width: 14, height: 14) : frame.insetBy(dx: 3, dy: 3)
-        AquaStyle.glass(rect, blue: checkbox ? state == .on : title.contains("开启") || title.contains("应用"), pressed: isHighlighted, radius: checkbox ? 3 : 10)
-        if checkbox && state == .on {
-            let tick = NSBezierPath(); tick.move(to: NSPoint(x: rect.minX + 3, y: rect.midY)); tick.line(to: NSPoint(x: rect.minX + 6, y: rect.minY + 3)); tick.line(to: NSPoint(x: rect.maxX - 2, y: rect.maxY - 3))
-            NSColor(hex: 0x123E6A).setStroke(); tick.lineWidth = 2; tick.stroke()
+        let box = dp(21)
+        let rect = checkbox ? NSRect(x: frame.minX + 0.5, y: frame.midY - box / 2, width: box, height: box)
+            : NSRect(x: frame.minX + 0.5, y: frame.minY + 1.5, width: frame.width - 1, height: frame.height - 2)
+        let on = checkbox && state == .on
+        AquaStyle.glass(rect, pink: pink || on, pressed: isHighlighted, radius: checkbox ? 3 : tab ? 4 : min(12, rect.height / 2),
+                        rim: checkbox ? (on ? AquaStyle.pinkRim : AquaStyle.rim) : AquaStyle.rim)
+        if on {
+            let tick = NSBezierPath()
+            tick.move(to: NSPoint(x: rect.minX + 3.2, y: rect.midY + 0.6))
+            tick.line(to: NSPoint(x: rect.minX + 6.2, y: rect.minY + 2.6))
+            tick.line(to: NSPoint(x: rect.maxX - 1.4, y: rect.maxY + 1.2))
+            NSColor(hex: 0x3D192B).setStroke(); tick.lineWidth = 1.6; tick.lineJoinStyle = .round; tick.stroke()
         }
         NSGraphicsContext.restoreGraphicsState()
-        let shadow = NSShadow(); shadow.shadowColor = .white.withAlphaComponent(0.9); shadow.shadowOffset = NSSize(width: 0, height: -1)
-        let attrs: [NSAttributedString.Key: Any] = [.font: font ?? NSFont.systemFont(ofSize: 12), .foregroundColor: isEnabled ? AquaStyle.ink : NSColor.disabledControlTextColor, .shadow: shadow]
-        let text = title as NSString, size = (title as NSString).size(withAttributes: attrs)
-        text.draw(at: NSPoint(x: checkbox ? frame.minX + 23 : frame.midX - size.width / 2, y: frame.midY - size.height / 2), withAttributes: attrs)
-        if showsFirstResponder { NSFocusRingPlacement.only.set(); NSBezierPath(roundedRect: frame.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8).fill() }
+        let attrs: [NSAttributedString.Key: Any] = [.font: font ?? NSFont.systemFont(ofSize: 12),
+                                                    .foregroundColor: isEnabled ? AquaStyle.ink : NSColor.disabledControlTextColor]
+        let text = title as NSString, size = text.size(withAttributes: attrs)
+        text.draw(at: NSPoint(x: checkbox ? frame.minX + dp(33) : frame.midX - size.width / 2, y: frame.midY - size.height / 2 - (view.isFlipped ? 0.5 : -0.5)), withAttributes: attrs)
+        if showsFirstResponder { NSFocusRingPlacement.only.set(); NSBezierPath(roundedRect: checkbox ? rect : frame.insetBy(dx: 1, dy: 1), xRadius: 6, yRadius: 6).fill() }
     }
 }
 
 final class AquaSliderCell: NSSliderCell {
+    static let knob = NSSize(width: dp(24), height: dp(30))
+    override var knobThickness: CGFloat { Self.knob.width }
+    private var knobTop: CGFloat { ((controlView?.bounds.height ?? Self.knob.height) - Self.knob.height) / 2 }
+    override func barRect(flipped: Bool) -> NSRect {
+        let bounds = controlView?.bounds ?? .zero, top = knobTop + dp(4), height = dp(10)
+        return NSRect(x: bounds.minX, y: flipped ? top : bounds.height - top - height, width: bounds.width, height: height)
+    }
+    override func knobRect(flipped: Bool) -> NSRect {
+        let bounds = controlView?.bounds ?? .zero
+        let fraction = CGFloat((doubleValue - minValue) / max(0.0001, maxValue - minValue))
+        let y = flipped ? knobTop : bounds.height - knobTop - Self.knob.height
+        return NSRect(x: bounds.minX + fraction * (bounds.width - Self.knob.width), y: y, width: Self.knob.width, height: Self.knob.height)
+    }
     override func drawBar(inside rect: NSRect, flipped: Bool) {
-        let track = NSRect(x: rect.minX, y: rect.midY - 3, width: rect.width, height: 6)
-        let path = NSBezierPath(roundedRect: track, xRadius: 3, yRadius: 3)
-        NSGradient(starting: NSColor(hex: 0x8696A5), ending: .white)?.draw(in: path, angle: flipped ? 90 : -90)
-        NSColor(hex: 0x82909C).setStroke(); path.stroke()
-        let fraction = CGFloat((doubleValue - minValue) / max(0.001, maxValue - minValue))
-        let fill = NSBezierPath(roundedRect: NSRect(x: track.minX, y: track.minY + 1, width: track.width * fraction, height: 4), xRadius: 2, yRadius: 2)
-        AquaStyle.blue.setFill(); fill.fill()
+        let track = rect.insetBy(dx: 0.5, dy: 0.5)
+        let path = NSBezierPath(roundedRect: track, xRadius: track.height / 2, yRadius: track.height / 2)
+        NSGradient(starting: NSColor(hex: 0xE5DFE2), ending: NSColor(hex: 0xF6F3F4))?.draw(in: path, angle: flipped ? 90 : -90)
+        AquaStyle.line.setStroke(); path.lineWidth = 1; path.stroke()
     }
     override func drawKnob(_ rect: NSRect) {
-        NSGraphicsContext.saveGraphicsState()
-        if controlView?.isFlipped == true {
-            var transform = AffineTransform(translationByX: 0, byY: rect.minY + rect.maxY)
-            transform.scale(x: 1, y: -1); (transform as NSAffineTransform).concat()
-        }
-        AquaStyle.glass(rect.insetBy(dx: 1, dy: 1), blue: true, pressed: isHighlighted, radius: rect.height / 2)
-        NSGraphicsContext.restoreGraphicsState()
+        // A shield: rounded shoulders on top of the track, pointing at the tick marks.
+        let flipped = controlView?.isFlipped == true, r = rect.insetBy(dx: 0.5, dy: 0.5)
+        let top = flipped ? r.minY : r.maxY, down: CGFloat = flipped ? 1 : -1, corner: CGFloat = 3.5
+        func point(_ x: CGFloat, _ depth: CGFloat) -> NSPoint { NSPoint(x: x, y: top + down * depth) }
+        let path = NSBezierPath()
+        path.move(to: point(r.midX, r.height))
+        path.line(to: point(r.minX, r.height * 0.58))
+        path.line(to: point(r.minX, corner))
+        path.curve(to: point(r.minX + corner, 0), controlPoint1: point(r.minX, 0), controlPoint2: point(r.minX, 0))
+        path.line(to: point(r.maxX - corner, 0))
+        path.curve(to: point(r.maxX, corner), controlPoint1: point(r.maxX, 0), controlPoint2: point(r.maxX, 0))
+        path.line(to: point(r.maxX, r.height * 0.58))
+        path.close(); path.lineJoinStyle = .round
+        AquaStyle.jelly(path, flipped: flipped)
+        if isHighlighted { NSColor(hex: 0x6B4A5B).withAlphaComponent(0.12).setFill(); path.fill() }
     }
 }
 
@@ -100,44 +175,36 @@ final class AquaPopupCell: NSPopUpButtonCell {
             var transform = AffineTransform(translationByX: 0, byY: frame.minY + frame.maxY)
             transform.scale(x: 1, y: -1); (transform as NSAffineTransform).concat()
         }
-        AquaStyle.glass(frame.insetBy(dx: 2, dy: 3), pressed: isHighlighted, radius: 6)
+        AquaStyle.glass(NSRect(x: frame.minX + 2.5, y: frame.minY + 3.5, width: frame.width - 5, height: frame.height - 7), pressed: isHighlighted, radius: 5)
         NSGraphicsContext.restoreGraphicsState()
     }
 }
 
+// White rounded panel; a title adds the glossy header strip with a pink sparkle.
 final class AquaGroup: NSView {
-    override func draw(_ dirtyRect: NSRect) {
-        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 1, dy: 1), xRadius: 9, yRadius: 9)
-        NSGradient(starting: NSColor(hex: 0xF5FDFF).withAlphaComponent(0.8), ending: NSColor(hex: 0xD9EDF0).withAlphaComponent(0.8))?.draw(in: path, angle: 90)
-        NSColor(hex: 0xA1AFBC).setStroke(); path.stroke()
-        let inset = NSBezierPath(roundedRect: bounds.insetBy(dx: 2, dy: 2), xRadius: 8, yRadius: 8)
-        NSColor.white.setStroke(); inset.stroke()
-    }
-}
-
-// Procedural scenery adds an early Aero atmosphere without image assets or timers.
-enum AeroScenery {
-    static func bubble(_ rect: NSRect) {
-        let circle = NSBezierPath(ovalIn: rect)
-        NSGradient(starting: NSColor.white.withAlphaComponent(0.03), ending: NSColor.white.withAlphaComponent(0.45))?.draw(in: circle, angle: 90)
-        NSColor.white.withAlphaComponent(0.75).setStroke(); circle.lineWidth = 1; circle.stroke()
-        let shine = NSBezierPath()
-        shine.appendArc(withCenter: NSPoint(x: rect.midX, y: rect.midY), radius: rect.width * 0.39, startAngle: 55, endAngle: 135)
-        NSColor.white.withAlphaComponent(0.9).setStroke(); shine.lineWidth = 2; shine.stroke()
-    }
-
-    static func landscape(in bounds: NSRect) {
-        let w = bounds.width, h = bounds.height
-        let sun = NSRect(x: w * 0.68, y: h * 0.59, width: h * 0.7, height: h * 0.7)
-        NSGradient(starting: NSColor.white.withAlphaComponent(0.75), ending: NSColor.white.withAlphaComponent(0))?.draw(in: NSBezierPath(ovalIn: sun), relativeCenterPosition: .zero)
-        for (offset, color) in [(CGFloat(0.12), 0x9DD369), (CGFloat(0.02), 0x66B65E)] {
-            let hill = NSBezierPath(); hill.move(to: .zero)
-            hill.line(to: NSPoint(x: 0, y: h * (0.16 + offset)))
-            hill.curve(to: NSPoint(x: w, y: h * (0.13 + offset)), controlPoint1: NSPoint(x: w * 0.38, y: h * (0.52 + offset)), controlPoint2: NSPoint(x: w * 0.65, y: -h * 0.08))
-            hill.line(to: NSPoint(x: w, y: 0)); hill.close()
-            NSGradient(starting: NSColor(hex: color).withAlphaComponent(0.5), ending: NSColor(hex: 0xDDF4BB).withAlphaComponent(0.85))?.draw(in: hill, angle: 90)
+    static let headerHeight = dp(41)
+    let titled: Bool
+    init(title: String? = nil) {
+        titled = title != nil
+        super.init(frame: .zero)
+        if let title {
+            let heading = label(title, 10.5)
+            place(heading, x: 46, centerY: 20.5); addSubview(heading)
         }
-        bubble(NSRect(x: w * 0.81, y: h * 0.48, width: 37, height: 37))
-        bubble(NSRect(x: w * 0.9, y: h * 0.7, width: 18, height: 18))
+    }
+    required init?(coder: NSCoder) { fatalError() }
+    override var isFlipped: Bool { true }
+    override func draw(_ dirtyRect: NSRect) {
+        let path = NSBezierPath(roundedRect: bounds.insetBy(dx: 0.5, dy: 0.5), xRadius: 7, yRadius: 7)
+        NSColor.white.setFill(); path.fill()
+        if titled {
+            NSGraphicsContext.saveGraphicsState(); path.addClip()
+            AquaStyle.header.draw(in: NSRect(x: 0, y: 0, width: bounds.width, height: Self.headerHeight), angle: 90)
+            AquaStyle.line.setFill(); NSRect(x: 0, y: Self.headerHeight, width: bounds.width, height: dp(1)).fill()
+            NSGraphicsContext.restoreGraphicsState()
+            let star = AquaStyle.sparkle(in: NSRect(x: dp(15), y: dp(11), width: dp(20), height: dp(20)))
+            AquaStyle.jelly(star, flipped: true, rim: NSColor(hex: 0xD0679F))
+        }
+        AquaStyle.line.setStroke(); path.lineWidth = 1; path.stroke()
     }
 }
