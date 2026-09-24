@@ -74,22 +74,24 @@ final class AquaWindowButton: NSButton {
         if showsGlyph { drawGlyph(in: rect) }
     }
     private func drawGlyph(in rect: NSRect) {
-        let color = border.blended(withFraction: 0.35, of: .black)!.withAlphaComponent(isEnabled ? 0.85 : 0.35)
-        let r = rect.width * 0.24, c = NSPoint(x: rect.midX, y: rect.midY)
+        let color = border.blended(withFraction: 0.35, of: .black)!.withAlphaComponent(isEnabled ? 0.85 : 0.5)
+        // All glyphs share one extent so they read at the same size.
+        let h = rect.width * 0.25, c = NSPoint(x: rect.midX, y: rect.midY)
         let path = NSBezierPath(); path.lineWidth = max(1.1, rect.width * 0.1); path.lineCapStyle = .round
         switch glyph {
         case .close:
+            let r = h * 0.75
             path.move(to: NSPoint(x: c.x - r, y: c.y - r)); path.line(to: NSPoint(x: c.x + r, y: c.y + r))
             path.move(to: NSPoint(x: c.x - r, y: c.y + r)); path.line(to: NSPoint(x: c.x + r, y: c.y - r))
             color.setStroke(); path.stroke()
         case .minimize:
-            path.move(to: NSPoint(x: c.x - r * 1.15, y: c.y)); path.line(to: NSPoint(x: c.x + r * 1.15, y: c.y))
+            path.move(to: NSPoint(x: c.x - h * 0.8, y: c.y)); path.line(to: NSPoint(x: c.x + h * 0.8, y: c.y))
             color.setStroke(); path.stroke()
         case .zoom:
             // Two opposing triangles toward the top-left and bottom-right, as in the native full-screen glyph.
-            let up: CGFloat = isFlipped ? -1 : 1, s = r * 1.1, gap = r * 0.18
+            let up: CGFloat = isFlipped ? -1 : 1, s = h * 1.15
             for sign: CGFloat in [1, -1] {
-                let corner = NSPoint(x: c.x - sign * (s * 0.5 + gap), y: c.y + sign * up * (s * 0.5 + gap))
+                let corner = NSPoint(x: c.x - sign * h, y: c.y + sign * up * h)
                 let tri = NSBezierPath()
                 tri.move(to: corner)
                 tri.line(to: NSPoint(x: corner.x + sign * s, y: corner.y))
