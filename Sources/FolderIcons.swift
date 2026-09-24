@@ -84,6 +84,7 @@ final class FolderIconLibrary {
         try png.write(to: file(slot), options: .atomic)
     }
     func remove(_ slot: String) { try? FileManager.default.removeItem(at: file(slot)) }
+    func removeAll() { configured.forEach(remove) }
 }
 
 enum FolderInspector {
@@ -374,6 +375,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     var iconArea: AquaGroup!
     var status: NSTextField!
     var previewButton: NSButton!
+    var resetButton: NSButton!
     // Preview / result sheet
     var sheet: NSWindow!
     var sheetTitle: NSTextField!
@@ -425,7 +427,9 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         put(keep, 30, 207, 200, 24)
         put(label("始终开启：已有自定义图标的文件夹一律跳过", 10, .regular, muted), 234, 211, 400, 16)
         iconArea = AquaGroup(); put(iconArea, 18, 252, 724, 346)
-        status = label("", 11, .regular, muted); status.maximumNumberOfLines = 2; put(status, 28, 610, 560, 36)
+        status = label("", 11, .regular, muted); status.maximumNumberOfLines = 2; put(status, 28, 610, 440, 36)
+        resetButton = NSButton(title: "全部恢复默认", target: self, action: #selector(resetAll)); resetButton.bezelStyle = .rounded
+        put(resetButton, 480, 612, 130, 32)
         previewButton = NSButton(title: "预览", target: self, action: #selector(startPreview)); previewButton.bezelStyle = .rounded
         put(previewButton, 620, 612, 120, 32)
         AquaStyle.install(in: surface)
@@ -438,6 +442,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         checks[1].state = options.splitEmpty ? .on : .off
         checks[2].state = options.includeRoot ? .on : .off
         previewButton.isEnabled = options.root != nil
+        resetButton.isEnabled = !library.configured.isEmpty || options != FolderIconOptions(root: options.root)
         if options.root == nil { status.stringValue = "先选择一个文件夹。未设置图标的颜色保持 macOS 原生图标。" }
         else if !options.subfolders && !options.includeRoot { status.stringValue = "关闭“处理子文件夹”时只处理第一层子文件夹。" }
         else { status.stringValue = "设置好图标后点击“预览”，确认后才会修改。" }
@@ -457,7 +462,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
             let tile = FolderSlotTile(slot: slot, caption: caption, dot: color?.tint, image: configured.contains(slot) ? library.image(slot) : nil)
             tile.onPick = { [weak self] in self?.upload(slot) }
             tile.onDrop = { [weak self] url in self?.importSlot(url, slot: slot) }
-            tile.onClear = { [weak self] in self?.library.remove(slot); self?.status.stringValue = folderSlotTitle(slot) + "已恢复原生。"; self?.buildIcons() }
+            tile.onClear = { [weak self] in self?.library.remove(slot); self?.refresh(); self?.status.stringValue = folderSlotTitle(slot) + "已恢复原生。" }
             return tile
         }
         if options.splitEmpty {
@@ -505,7 +510,18 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     func importSlot(_ url: URL, slot: String) {
         do { try library.importImage(from: url, slot: slot); status.stringValue = "已设置" + folderSlotTitle(slot) + "。" }
         catch { status.stringValue = "设置失败：请选择 20 MB 内的 PNG、JPEG、HEIC、TIFF 或 ICNS 图片。" }
-        buildIcons()
+        let text = status.stringValue; refresh(); status.stringValue = text
+    }
+    // Clears every slot image and option; the chosen folder and icons already written to folders stay.
+    @objc func resetAll() {
+        let alert = NSAlert(); alert.messageText = "全部恢复默认？"
+        alert.informativeText = "将清除所有已设置的图标并恢复选项默认值。已经修改过的文件夹图标不受影响。"
+        alert.addButton(withTitle: "恢复默认"); alert.addButton(withTitle: "取消")
+        alert.beginSheetModal(for: window) { [weak self] response in
+            guard let self, response == .alertFirstButtonReturn else { return }
+            self.library.removeAll(); self.options = FolderIconOptions(root: self.options.root); self.options.save()
+            self.refresh(); self.status.stringValue = "已全部恢复默认，所有颜色保持 macOS 原生图标。"
+        }
     }
 
     // MARK: Preview → confirm → apply → result
@@ -705,5 +721,7 @@ func runFolderIconTests() {
     check(FolderInspector.hasCustomIcon(child) && (try! Data(contentsOf: material.appendingPathComponent("Icon\r/..namedfork/rsrc"))) == materialIcon)
     check(plan(engine.scan(root: root, options: options))["工作"] == .keepCustom)
     check(!FolderInspector.hasCustomIcon(root))
+    library.removeAll()
+    check(library.configured.isEmpty && !fm.fileExists(atPath: library.file("red").path))
     print("Folder icon tests passed: tags, custom-icon protection, emptiness, no-tag and extra color slots, scope, split slots, drift detection.")
 }
