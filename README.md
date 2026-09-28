@@ -51,6 +51,8 @@ bash build.sh
 
 构建脚本会运行模型测试，在临时目录完成签名核验，再生成 `dist/Luma Trail.app` 与 `dist/Luma-Trail-MVP.zip`。编译缓存位于 `.build/`，生成文件均已排除在 Git 之外。Documents 文件同步服务可能给复制后的 `.app` 附加 Finder 元数据，影响严格签名核验；ZIP 来自核验通过的临时应用包，建议用 ZIP 分发。
 
+推送到 `main` 时，GitHub Actions 会在 Apple Silicon runner 上执行同一脚本，并把 zip 发到 [GitHub Releases](https://github.com/debugtheworldbot/luma-trail/releases)。每个提交一个 Release，标签为 `v` + `CFBundleShortVersionString` + 短提交号（例如 `v0.4.0-87bb437`）。附件名是 `Luma-Trail-arm64.zip`。当前 `main` 顶端的构建会标成 Latest。签名方式与本地构建相同，仍未公证。
+
 ## 验证范围
 
 粒子模型测试：移动发射、静止不发射、过期清除、跨屏跳变不连线、快速点击的粒子数量上限、暂停清空。

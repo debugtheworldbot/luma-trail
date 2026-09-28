@@ -1,0 +1,48 @@
+name: Release
+
+# Every push to main builds the Apple Silicon app and publishes the zip
+# to a GitHub Release. The tag is v<CFBundleShortVersionString>-<short sha>.
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+# Same commit may be retried; different commits on main each publish.
+concurrency:
+  group: release-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build and publish
+    runs-on: macos-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Require Apple Silicon
+        shell: bash
+        run: |
+          set -euo pipefail
+          arch=$(uname -m)
+          echo "runner arch: ${arch}"
+          echo "xcode: $(xcode-select -p)"
+          if [[ "$arch" != "arm64" ]]; then
+            echo "build.sh targets arm64-apple-macosx13.0; this runner is ${arch}." >&2
+            exit 1
+          fi
+
+      - name: Build
+        shell: bash
+        run: bash build.sh
+
+      - name: Publish GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: bash .github/scripts/publish-release.sh
