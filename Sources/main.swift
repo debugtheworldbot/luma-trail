@@ -355,7 +355,6 @@ final class PreviewView: NSView {
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     let appUpdater = AppUpdater()
-    var updateStatusLabel: NSTextField?
     var updateCheckButton: NSButton?
     var automaticUpdateButton: NSButton?
     var cursorAppearance: CursorWindowController?
@@ -609,8 +608,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
     func refreshUpdateUI() {
-        updateStatusLabel?.stringValue = appUpdater.status
-        updateStatusLabel?.toolTip = appUpdater.status
         updateCheckButton?.isEnabled = appUpdater.canCheckForUpdates
         updateCheckButton?.title = appUpdater.availableVersion == nil ? "检查更新…" : "查看更新…"
         automaticUpdateButton?.state = appUpdater.automaticallyChecks ? .on : .off
@@ -707,11 +704,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         burstButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
 
-        // Single-row footer: Dock, version, update status, update controls and effects.
+        // Single-row footer: Dock, version, update controls and effects.
         let versionLabel = label(appUpdater.currentVersion, 11)
-        let updateStatus = label(appUpdater.status, 11, .regular, AquaStyle.soft)
-        updateStatus.lineBreakMode = .byTruncatingTail
-        updateStatusLabel = updateStatus
         let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
         automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         automaticUpdates.font = .systemFont(ofSize: 11)
@@ -719,7 +713,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let checkUpdates = NSButton(title: "检查更新…", target: appUpdater, action: #selector(AppUpdater.checkForUpdates(_:)))
         checkUpdates.font = .systemFont(ofSize: 12)
         updateCheckButton = checkUpdates
-        let updateControls = NSStackView(views: [versionLabel, updateStatus, automaticUpdates, checkUpdates])
+        let updateControls = NSStackView(views: [versionLabel, automaticUpdates, checkUpdates])
         updateControls.orientation = .horizontal
         updateControls.alignment = .centerY
         updateControls.spacing = dp(12)
@@ -728,7 +722,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSLayoutConstraint.activate([
             updateControls.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: dp(344 - 99)),
             updateControls.centerYAnchor.constraint(equalTo: root.topAnchor, constant: dp(1222 - 74)),
-            updateStatus.widthAnchor.constraint(lessThanOrEqualToConstant: dp(260)),
             checkUpdates.widthAnchor.constraint(equalToConstant: dp(150)),
             checkUpdates.heightAnchor.constraint(equalToConstant: dp(41))
         ])
