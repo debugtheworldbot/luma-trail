@@ -9,6 +9,20 @@ SPARKLE=$(bash scripts/prepare-sparkle.sh)
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$CACHE" "$DIST"
 mkdir -p "$APP/Contents/Frameworks"
 ditto "$SPARKLE/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+# This app is arm64-only and does not enable App Sandbox or Sparkle's XPC services.
+# Trim only the fresh staging copy; keep the verified download intact.
+FRAMEWORK="$APP/Contents/Frameworks/Sparkle.framework"
+rm -rf "$FRAMEWORK/Versions/B/XPCServices" "$FRAMEWORK/XPCServices"
+for binary in Sparkle Autoupdate Updater.app/Contents/MacOS/Updater; do
+  path="$FRAMEWORK/Versions/B/$binary"
+  xcrun lipo "$path" -thin arm64 -output "$path.arm64"
+  mv "$path.arm64" "$path"
+  [[ "$(xcrun lipo -archs "$path")" == "arm64" ]]
+done
+# Re-sign modified helpers from the inside out, retaining Hardened Runtime.
+codesign --force --sign - --options runtime "$FRAMEWORK/Versions/B/Autoupdate"
+codesign --force --sign - --options runtime "$FRAMEWORK/Versions/B/Updater.app"
+codesign --force --sign - --options runtime "$FRAMEWORK"
 cp "$SPARKLE/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 xcrun clang -target arm64-apple-macosx13.0 -fobjc-arc -fmodules -fmodules-cache-path="$CACHE" -c Sources/CursorBridge.m -o "$STAGING/CursorBridge.o"
 xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
@@ -34,6 +48,10 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 codesign --force --sign - "$APP"
 codesign --verify --deep --strict "$APP"
 "$APP/Contents/MacOS/LumaTrail" --self-test
+# ditto merges existing directories, which would otherwise retain removed XPCs.
+if [[ -e "$DIST/Luma Trail.app" ]]; then
+  mv "$DIST/Luma Trail.app" "$STAGING/Previous Luma Trail.app"
+fi
 ditto "$APP" "$DIST/Luma Trail.app"
 ditto -c -k --sequesterRsrc --keepParent "$APP" "$DIST/Luma-Trail-MVP.zip"
 echo "Built: $DIST/Luma Trail.app"

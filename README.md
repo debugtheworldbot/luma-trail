@@ -52,7 +52,7 @@ bash build.sh
 
 构建脚本会运行模型测试，在临时目录完成签名核验，再生成 `dist/Luma Trail.app` 与 `dist/Luma-Trail-MVP.zip`。编译缓存位于 `.build/`，生成文件均已排除在 Git 之外。Documents 文件同步服务可能给复制后的 `.app` 附加 Finder 元数据，影响严格签名核验；ZIP 来自核验通过的临时应用包，建议用 ZIP 分发。
 
-首次构建会下载固定的 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，校验 SHA-256 后嵌入官方 framework，并附带许可证。后续复用 `.build/sparkle/` 中的下载缓存。Sparkle 的嵌套组件保留官方签名；应用本身仍使用 ad-hoc 签名、未公证。
+首次构建会下载固定的 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，校验 SHA-256 后嵌入 framework，并附带许可证。后续复用 `.build/sparkle/` 中的完整下载缓存。打包时仅在临时副本中保留 arm64 架构，并按 [官方说明](https://sparkle-project.org/documentation/sandboxing/#removing-xpc-services) 移除未启用的 XPC 服务；保留必需的 Autoupdate 和 Updater.app，再由内到外重新进行 ad-hoc 签名和严格校验。应用仍未公证。已有 `dist` 应用会先移到本次构建的临时目录保存，避免合并复制时残留旧框架文件。
 
 推送到 `main` 时，GitHub Actions 会构建并发布 ZIP 和带 Ed25519 更新包签名的 `appcast.xml`。每个提交一个 Release，标签为 `v` + `CFBundleShortVersionString` + 短提交号。附件名是 `Luma-Trail-arm64.zip`。CI 把 `CFBundleVersion` 设置为 `1000 + github.run_number`，所以即使展示版本未变，新推送也能被识别为更新。同一提交重跑复用已发布附件，避免替换客户端正在下载的安装包。
 
