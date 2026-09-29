@@ -354,6 +354,10 @@ final class PreviewView: NSView {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    let appUpdater = AppUpdater()
+    var updateStatusLabel: NSTextField?
+    var updateCheckButton: NSButton?
+    var automaticUpdateButton: NSButton?
     var cursorAppearance: CursorWindowController?
     let folderIcons = FolderIconWindowController()
     let settings = TrailSettings()
@@ -387,6 +391,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cursorAppearance = CursorWindowController()
         painter.loadCustom(settings.customData)
         buildMainMenu(); buildWindow(); buildStatusMenu(); buildOverlays(); configureHotkey()
+        appUpdater.onChange = { [weak self] in self?.refreshUpdateUI() }
+        appUpdater.start()
         folderIcons.startWatching()
         NotificationCenter.default.addObserver(self, selector: #selector(screenChanged), name: NSApplication.didChangeScreenParametersNotification, object: nil)
         let workspace = NSWorkspace.shared.notificationCenter
@@ -414,6 +420,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let appMenu = NSMenu(); appItem.submenu = appMenu
         let settingsItem = NSMenuItem(title: "设置…", action: #selector(showSettings), keyEquivalent: ",")
         settingsItem.target = self; appMenu.addItem(settingsItem)
+        appMenu.addItem(appUpdater.makeMenuItem())
         appMenu.addItem(NSMenuItem(title: "关闭窗口", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
         appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: "退出 Luma Trail", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
@@ -442,6 +449,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         cursorItem.target = self; menu.insertItem(cursorItem, at: menu.items.count - 1)
         let folderItem = NSMenuItem(title: "文件夹图标…", action: #selector(showFolderIcons), keyEquivalent: "")
         folderItem.target = self; menu.insertItem(folderItem, at: menu.items.count - 1)
+        menu.insertItem(appUpdater.makeMenuItem(), at: menu.items.count - 1)
         statusItem.menu = menu
     }
     func configureHotkey() {
@@ -600,9 +608,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
+    func refreshUpdateUI() {
+        updateStatusLabel?.stringValue = appUpdater.status
+        updateStatusLabel?.toolTip = appUpdater.status
+        updateCheckButton?.isEnabled = appUpdater.canCheckForUpdates
+        updateCheckButton?.title = appUpdater.availableVersion == nil ? "检查更新…" : "查看更新…"
+        automaticUpdateButton?.state = appUpdater.automaticallyChecks ? .on : .off
+    }
+
     func buildWindow() {
         // Every frame below quotes the 1.5× design mockup, whose window starts at (99, 74).
-        let size = NSSize(width: dp(1341), height: dp(1182))
+        let size = NSSize(width: dp(1341), height: dp(1252))
         settingsWindow = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         settingsWindow.title = "Luma Trail"; settingsWindow.isReleasedWhenClosed = false
         settingsWindow.titleVisibility = .hidden
@@ -691,15 +707,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         burstButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
 
+        // Software updates.
+        let versionLabel = label("软件更新 · \(appUpdater.currentVersion)", 11)
+        put(versionLabel, 140, 1213, 320, 28)
+        let updateStatus = label(appUpdater.status, 11, .regular, AquaStyle.soft)
+        updateStatus.lineBreakMode = .byTruncatingTail
+        put(updateStatus, 480, 1205, 720, 28)
+        updateStatusLabel = updateStatus
+        let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
+        automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
+        automaticUpdates.font = .systemFont(ofSize: 11)
+        put(automaticUpdates, 480, 1237, 220, 28)
+        automaticUpdateButton = automaticUpdates
+        let checkUpdates = NSButton(title: "检查更新…", target: appUpdater, action: #selector(AppUpdater.checkForUpdates(_:)))
+        checkUpdates.font = .systemFont(ofSize: 12)
+        put(checkUpdates, 1230, 1213, 172, 41)
+        updateCheckButton = checkUpdates
+        refreshUpdateUI()
+
         // Footer.
         let dockButton = NSButton(checkboxWithTitle: "在 Dock 中显示", target: self, action: #selector(toggleDockVisibility(_:)))
         dockButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         dockButton.font = .systemFont(ofSize: 12)
         dockButton.state = UserDefaults.standard.bool(forKey: "showInDock") ? .on : .off
-        put(dockButton, 139.5, 1207, 180, 28)
+        put(dockButton, 139.5, 1277, 180, 28)
         enableButton = StatusButton(target: self, action: #selector(toggleEnabled))
         enableButton.on = settings.enabled
-        put(enableButton, 1230, 1207, 172, 30)
+        put(enableButton, 1230, 1277, 172, 30)
         AquaStyle.install(in: root)
         updateValues(); applyStarTint()
         if let selected = themeButtons.first(where: \.selected) { board.scrollToVisible(selected.frame.insetBy(dx: 0, dy: -ThemeRow.height)) }

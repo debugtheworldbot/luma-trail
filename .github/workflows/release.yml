@@ -10,9 +10,9 @@ on:
 permissions:
   contents: write
 
-# Same commit may be retried; different commits on main each publish.
+# Serialize publishing so an older run cannot replace the current update feed.
 concurrency:
-  group: release-${{ github.sha }}
+  group: release-main
   cancel-in-progress: false
 
 jobs:
@@ -20,6 +20,8 @@ jobs:
     name: Build and publish
     runs-on: macos-latest
     timeout-minutes: 30
+    outputs:
+      tag: ${{ steps.publish.outputs.tag }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -36,13 +38,33 @@ jobs:
             exit 1
           fi
 
+      - name: Test update publication safeguards
+        run: python3 tests/test_update_publication.py
+
       - name: Build
         shell: bash
-        run: bash build.sh
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "Configure the SPARKLE_PRIVATE_KEY repository secret before publishing updates." >&2
+            exit 1
+          fi
+          BUILD_NUMBER=$((1000 + GITHUB_RUN_NUMBER)) bash build.sh
 
       - name: Publish GitHub Release
+        id: publish
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
         run: bash .github/scripts/publish-release.sh
+
+  publish-update:
+    name: Publish in-app update
+    needs: release
+    uses: ./.github/workflows/publish-update.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}

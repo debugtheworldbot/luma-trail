@@ -5,15 +5,24 @@ STAGING=$(mktemp -d /private/tmp/luma-trail-build.XXXXXX)
 APP="$STAGING/Luma Trail.app"
 CACHE="$PWD/.build/swift-module-cache"
 DIST="$PWD/dist"
+SPARKLE=$(bash scripts/prepare-sparkle.sh)
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$CACHE" "$DIST"
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$SPARKLE/Sparkle.framework" "$APP/Contents/Frameworks/Sparkle.framework"
+cp "$SPARKLE/LICENSE" "$APP/Contents/Resources/Sparkle-LICENSE.txt"
 xcrun clang -target arm64-apple-macosx13.0 -fobjc-arc -fmodules -fmodules-cache-path="$CACHE" -c Sources/CursorBridge.m -o "$STAGING/CursorBridge.o"
 xcrun swiftc -swift-version 5 -O -module-cache-path "$CACHE" \
   -target arm64-apple-macosx13.0 -framework AppKit -framework Carbon \
+  -F "$SPARKLE" -framework Sparkle -Xlinker -rpath -Xlinker @executable_path/../Frameworks \
   -import-objc-header Sources/CursorBridge.h "$STAGING/CursorBridge.o" \
   Sources/AquaStyle.swift Sources/CursorAppearance.swift Sources/FolderIcons.swift Sources/TrailNature.swift Sources/TrailGlow.swift \
-  Sources/TrailFestive.swift Sources/TrailInk.swift Sources/TrailPaths.swift Sources/Particles.swift Sources/main.swift \
+  Sources/TrailFestive.swift Sources/TrailInk.swift Sources/TrailPaths.swift Sources/Particles.swift Sources/AppUpdater.swift Sources/main.swift \
   -o "$APP/Contents/MacOS/LumaTrail"
 cp Info.plist "$APP/Contents/Info.plist"
+if [[ -n "${BUILD_NUMBER:-}" ]]; then
+  [[ "$BUILD_NUMBER" =~ ^[1-9][0-9]*$ ]] || { echo "Invalid BUILD_NUMBER" >&2; exit 1; }
+  plutil -replace CFBundleVersion -string "$BUILD_NUMBER" "$APP/Contents/Info.plist"
+fi
 cp Assets/SettingsBanner.png "$APP/Contents/Resources/SettingsBanner.png"
 ICONSET="$STAGING/AppIcon.iconset"
 mkdir -p "$ICONSET"

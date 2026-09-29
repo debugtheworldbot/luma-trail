@@ -21,7 +21,8 @@ Apple Silicon（M1 或更新）Mac，macOS 13+。
 - ⌘⇧S 全局暂停 / 开启，也可点击设置窗口右下角的状态或从菜单栏操作；若热键冲突，状态提示会说明。
 - 每块屏幕独立透明覆盖窗口，鼠标事件穿透。粒子层与鼠标外观设置独立。
 - 最多 240 个粒子，运动时 60 Hz、粒子消失后 24 Hz 采样，暂停后停止桌面计时器。
-- 设置自动记忆；没有联网、账户、自动开机启动或后台服务。
+- 设置自动记忆；仅检查和下载更新时联网，没有账户、自动开机启动或额外常驻后台服务。
+- Sparkle 应用内更新：默认每天自动检查，设置页显示当前版本、检查状态和可用新版，可关闭自动检查；设置页和菜单栏菜单均可手动检查。安装需用户确认。
 
 ## 鼠标外观（0.2.0）
 
@@ -51,7 +52,19 @@ bash build.sh
 
 构建脚本会运行模型测试，在临时目录完成签名核验，再生成 `dist/Luma Trail.app` 与 `dist/Luma-Trail-MVP.zip`。编译缓存位于 `.build/`，生成文件均已排除在 Git 之外。Documents 文件同步服务可能给复制后的 `.app` 附加 Finder 元数据，影响严格签名核验；ZIP 来自核验通过的临时应用包，建议用 ZIP 分发。
 
-推送到 `main` 时，GitHub Actions 会在 Apple Silicon runner 上执行同一脚本，并把 zip 发到 [GitHub Releases](https://github.com/debugtheworldbot/luma-trail/releases)。每个提交一个 Release，标签为 `v` + `CFBundleShortVersionString` + 短提交号（例如 `v0.4.0-87bb437`）。附件名是 `Luma-Trail-arm64.zip`。当前 `main` 顶端的构建会标成 Latest。签名方式与本地构建相同，仍未公证。
+首次构建会下载固定的 [Sparkle 2.10.0](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0)，校验 SHA-256 后嵌入官方 framework，并附带许可证。后续复用 `.build/sparkle/` 中的下载缓存。Sparkle 的嵌套组件保留官方签名；应用本身仍使用 ad-hoc 签名、未公证。
+
+推送到 `main` 时，GitHub Actions 会构建并发布 ZIP 和带 Ed25519 更新包签名的 `appcast.xml`。每个提交一个 Release，标签为 `v` + `CFBundleShortVersionString` + 短提交号。附件名是 `Luma-Trail-arm64.zip`。CI 把 `CFBundleVersion` 设置为 `1000 + github.run_number`，所以即使展示版本未变，新推送也能被识别为更新。同一提交重跑复用已发布附件，避免替换客户端正在下载的安装包。
+
+发布完成后，`Publish Sparkle Update` 工作流将 appcast 发布到固定的 `updates` Release；其中安装包 URL 指向具体提交的 Release。只有仍位于 `main` 顶端的提交才能更新此源和 Latest，发布流程串行执行。客户端固定读取 [更新源](https://github.com/debugtheworldbot/luma-trail/releases/download/updates/appcast.xml)，不依赖 GitHub Latest 重定向。生成后会校验版本、下载地址、包大小和签名与构建包中的公钥一致，失败则停止发布。
+
+### 更新签名配置
+
+仓库需设置 GitHub Actions Secret `SPARKLE_PRIVATE_KEY`，内容为与 `Info.plist` 的 `SUPublicEDKey` 对应的 Sparkle 私钥。缺少 Secret 时 CI 会明确失败，不会发布不可验证的更新。私钥不可提交到 Git，也不可写入环境变量文件或日志。
+
+本项目密钥使用钥匙串 account `studio.luma.trail.mvp`；已生成的公钥保存在 `Info.plist`。使用 Sparkle 官方 `generate_keys --account studio.luma.trail.mvp` 可查看公钥，`-x <安全临时路径>` 可导出私钥用于配置 Secret。长期保留该钥匙串密钥；本项目无 Developer ID 签名，不能任意换公钥后指望旧客户端继续更新。详见 [Sparkle 官方接入与签名说明](https://sparkle-project.org/documentation/)。
+
+**首次迁移：** 0.4.0 及更早的安装包没有更新器，必须手动下载安装一次 0.5.0 或之后的接入版，此后才支持应用内更新。应用需解压放到可写位置（建议 `/Applications`）运行；系统 Gatekeeper 和公证要求仍适用。更新退出时保留原有鼠标恢复逻辑。
 
 ## 验证范围
 

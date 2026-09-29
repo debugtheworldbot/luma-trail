@@ -4,7 +4,8 @@
 # GH_TOKEN, GH_REPO, GITHUB_SHA, and GITHUB_REPOSITORY.
 set -euo pipefail
 
-version=$(plutil -extract CFBundleShortVersionString raw Info.plist)
+plist="dist/Luma Trail.app/Contents/Info.plist"
+version=$(plutil -extract CFBundleShortVersionString raw "$plist")
 if [[ ! "$version" =~ ^[0-9A-Za-z][0-9A-Za-z._+-]*$ ]]; then
   echo "CFBundleShortVersionString cannot be used in a release tag: ${version}" >&2
   exit 1
@@ -24,6 +25,14 @@ short=${GITHUB_SHA:0:7}
 tag="v${version}-${short}"
 src="dist/Luma-Trail-MVP.zip"
 asset="dist/Luma-Trail-arm64.zip"
+echo "tag=$tag" >> "${GITHUB_OUTPUT:?GITHUB_OUTPUT is required}"
+
+# Published version archives are immutable; retries reuse the existing release.
+if gh release view "$tag" >/dev/null 2>&1; then
+  gh release download "$tag" --pattern appcast.xml --dir "$(mktemp -d)"
+  echo "Reusing published ${tag}"
+  exit 0
+fi
 
 if [[ ! -f "$src" ]]; then
   echo "Missing ${src}. Run build.sh first." >&2
@@ -31,6 +40,15 @@ if [[ ! -f "$src" ]]; then
 fi
 
 cp "$src" "$asset"
+updates=$(mktemp -d)
+cp "$asset" "$updates/Luma-Trail-arm64.zip"
+sparkle=$(bash scripts/prepare-sparkle.sh)
+printf '%s' "${SPARKLE_PRIVATE_KEY:?SPARKLE_PRIVATE_KEY is required}" | \
+  "$sparkle/bin/generate_appcast" --ed-key-file - --maximum-deltas 0 \
+    --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/" "$updates"
+cp "$updates/appcast.xml" dist/appcast.xml
+xcrun swift -module-cache-path .build/swift-module-cache scripts/verify-appcast.swift \
+  dist/appcast.xml "$asset" "$plist" "https://github.com/${GITHUB_REPOSITORY}/releases/download/${tag}/Luma-Trail-arm64.zip"
 checksum=$(shasum -a 256 "$asset" | awk '{print $1}')
 notes=$(mktemp)
 trap 'rm -f "$notes"' EXIT
@@ -47,20 +65,10 @@ EOF
 
 title="Luma Trail ${version} (${short})"
 
-if gh release view "$tag" >/dev/null 2>&1; then
-  gh release upload "$tag" "$asset" --clobber
-  gh release edit "$tag" --title "$title" --notes-file "$notes" --draft=false
-else
-  gh release create "$tag" "$asset" \
+gh release create "$tag" "$asset" dist/appcast.xml \
     --target "$GITHUB_SHA" \
     --title "$title" \
     --latest=false \
     --notes-file "$notes"
-fi
-
-tip=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq .sha)
-if [[ "$tip" == "$GITHUB_SHA" ]]; then
-  gh release edit "$tag" --latest
-fi
 
 echo "Published ${tag}"
