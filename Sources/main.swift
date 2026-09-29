@@ -708,20 +708,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
 
         // Single-row footer: Dock, version, update status, update controls and effects.
-        let versionLabel = label("软件更新 · \(appUpdater.currentVersion)", 11)
-        put(versionLabel, 344, 1208, 260, 28)
+        let versionLabel = label(appUpdater.currentVersion, 11)
+        put(versionLabel, 460, 1208, 100, 28)
         let updateStatus = label(appUpdater.status, 11, .regular, AquaStyle.soft)
         updateStatus.lineBreakMode = .byTruncatingTail
-        put(updateStatus, 620, 1208, 228, 28)
+        put(updateStatus, 575, 1208, 190, 28)
         updateStatusLabel = updateStatus
         let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
         automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         automaticUpdates.font = .systemFont(ofSize: 11)
-        put(automaticUpdates, 866, 1207, 178, 28)
+        put(automaticUpdates, 780, 1207, 178, 28)
         automaticUpdateButton = automaticUpdates
         let checkUpdates = NSButton(title: "检查更新…", target: appUpdater, action: #selector(AppUpdater.checkForUpdates(_:)))
         checkUpdates.font = .systemFont(ofSize: 12)
-        put(checkUpdates, 1060, 1202, 150, 41)
+        put(checkUpdates, 973, 1202, 150, 41)
         updateCheckButton = checkUpdates
         refreshUpdateUI()
 

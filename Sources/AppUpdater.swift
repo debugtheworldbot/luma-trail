@@ -14,8 +14,7 @@ final class AppUpdater: NSObject, SPUUpdaterDelegate, SPUStandardUserDriverDeleg
     var automaticallyChecks: Bool { controller.updater.automaticallyChecksForUpdates }
     var currentVersion: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—"
-        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—"
-        return "v\(version) (\(build))"
+        return "v\(version)"
     }
 
     override init() {
