@@ -618,7 +618,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func buildWindow() {
         // Every frame below quotes the 1.5× design mockup, whose window starts at (99, 74).
-        let size = NSSize(width: dp(1341), height: dp(1252))
+        let size = NSSize(width: dp(1341), height: dp(1182))
         settingsWindow = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         settingsWindow.title = "Luma Trail"; settingsWindow.isReleasedWhenClosed = false
         settingsWindow.titleVisibility = .hidden
@@ -707,33 +707,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         burstButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
 
-        // Software updates.
+        // Single-row footer: Dock, version, update status, update controls and effects.
         let versionLabel = label("软件更新 · \(appUpdater.currentVersion)", 11)
-        put(versionLabel, 140, 1213, 320, 28)
+        put(versionLabel, 344, 1208, 260, 28)
         let updateStatus = label(appUpdater.status, 11, .regular, AquaStyle.soft)
         updateStatus.lineBreakMode = .byTruncatingTail
-        put(updateStatus, 480, 1205, 720, 28)
+        put(updateStatus, 620, 1208, 228, 28)
         updateStatusLabel = updateStatus
         let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
         automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         automaticUpdates.font = .systemFont(ofSize: 11)
-        put(automaticUpdates, 480, 1237, 220, 28)
+        put(automaticUpdates, 866, 1207, 178, 28)
         automaticUpdateButton = automaticUpdates
         let checkUpdates = NSButton(title: "检查更新…", target: appUpdater, action: #selector(AppUpdater.checkForUpdates(_:)))
         checkUpdates.font = .systemFont(ofSize: 12)
-        put(checkUpdates, 1230, 1213, 172, 41)
+        put(checkUpdates, 1060, 1202, 150, 41)
         updateCheckButton = checkUpdates
         refreshUpdateUI()
 
-        // Footer.
         let dockButton = NSButton(checkboxWithTitle: "在 Dock 中显示", target: self, action: #selector(toggleDockVisibility(_:)))
         dockButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         dockButton.font = .systemFont(ofSize: 12)
         dockButton.state = UserDefaults.standard.bool(forKey: "showInDock") ? .on : .off
-        put(dockButton, 139.5, 1277, 180, 28)
+        put(dockButton, 139.5, 1207, 180, 28)
         enableButton = StatusButton(target: self, action: #selector(toggleEnabled))
         enableButton.on = settings.enabled
-        put(enableButton, 1230, 1277, 172, 30)
+        put(enableButton, 1230, 1207, 172, 30)
         AquaStyle.install(in: root)
         updateValues(); applyStarTint()
         if let selected = themeButtons.first(where: \.selected) { board.scrollToVisible(selected.frame.insetBy(dx: 0, dy: -ThemeRow.height)) }
