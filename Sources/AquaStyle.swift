@@ -18,6 +18,36 @@ enum AquaStyle {
     static let rim = NSColor(hex: 0x9B8691)
     static let pinkRim = NSColor(hex: 0xAB537E)
     static let background = NSColor(hex: 0xF7F5F6)
+    static let titlebarHeight = dp(42)
+
+    // All app-owned windows share the settings window's chrome. Sheets keep modal controls in their content.
+    static func installWindowChrome(in window: NSWindow, title: String = "Luma Trail", symbol: String? = nil, showsWindowButtons: Bool = true) {
+        window.styleMask.insert(.fullSizeContentView)
+        window.titleVisibility = .hidden
+        window.titlebarAppearsTransparent = true
+        window.backgroundColor = background
+        window.appearance = NSAppearance(named: .aqua)
+        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
+            window.standardWindowButton(kind)?.isHidden = true
+        }
+        guard let content = window.contentView else { return }
+        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: content.bounds.width, height: titlebarHeight))
+        header.title = title; header.symbol = symbol
+        header.autoresizingMask = [.width]
+        content.addSubview(header)
+        guard showsWindowButtons else { return }
+        let controls: [(Int, Int, AquaWindowButton.Glyph, String, Selector?)] = [
+            (0xF5A798, 0x9C3C25, .close, "关闭", #selector(NSWindow.performClose(_:))),
+            (0xFBD689, 0xA5790A, .minimize, "最小化", #selector(NSWindow.performMiniaturize(_:))),
+            (0x9FDDC3, 0x1D7D58, .zoom, "缩放（此窗口为固定尺寸）", nil)
+        ]
+        for (index, control) in controls.enumerated() {
+            let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), glyph: control.2, title: control.3, target: window, action: control.4)
+            button.frame = NSRect(x: dp(24.5 + CGFloat(index) * 27) - 9, y: dp(21) - 8, width: 18, height: 16)
+            button.isEnabled = control.4 != nil
+            header.addSubview(button)
+        }
+    }
 
     static let whiteGloss = gradient([0xFEFDFE, 0xF5F4F5, 0xEAE5E8, 0xEDE9EB, 0xF5F2F3, 0xFDFCFC], [0, 0.22, 0.42, 0.5, 0.72, 1])
     static let pinkGloss = gradient([0xFFE5F2, 0xFFCBE5, 0xFFB3D8, 0xFFBEDE, 0xFFD5E9, 0xFFEDF5], [0, 0.22, 0.42, 0.52, 0.75, 1])

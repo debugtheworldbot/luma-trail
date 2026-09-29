@@ -29,6 +29,8 @@ The build compiles Objective-C and Swift 5 sources for arm64, applies an ad-hoc 
 
 Match existing four-space indentation and same-line opening braces. Use `UpperCamelCase` for Swift types and `lowerCamelCase` for properties, functions, and enum cases. Keep bridge functions prefixed with `LTCursor`. No formatter or linter is configured; avoid unrelated formatting changes. Preserve persisted enum raw values and settings keys when extending themes.
 
+All app-owned windows must match the settings window's Aqua style. Use `AquaStyle.installWindowChrome(in:title:symbol:showsWindowButtons:)` for the shared title bar, background, appearance, and traffic lights; do not duplicate or customize their colors, sizes, spacing, or title-bar height. Lay out content below `AquaStyle.titlebarHeight` and use `AquaStyle.install(in:)` for controls. Fixed-size windows show all three traffic lights with zoom disabled. Sheets use the same chrome with `showsWindowButtons: false` and retain their existing modal actions. System-managed dialogs, borderless effect overlays, and test-only rendering windows retain their native or purpose-specific behavior.
+
 ## Testing Guidelines
 
 Tests are embedded Swift functions using runtime checks; there is no separate test target or coverage threshold. Extend `run…Tests()` functions for simulation, image processing, and persistence changes. Run `bash build.sh` before submitting code changes. Manually check affected previews, pause/resume, click-through overlays, and cursor restoration. Report the macOS version and distinguish automated checks from visual or multi-display verification.

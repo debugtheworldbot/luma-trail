@@ -618,32 +618,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let size = NSSize(width: dp(1341), height: dp(1182))
         settingsWindow = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
         settingsWindow.title = "Luma Trail"; settingsWindow.isReleasedWhenClosed = false
-        settingsWindow.titleVisibility = .hidden
-        settingsWindow.titlebarAppearsTransparent = true; settingsWindow.backgroundColor = AquaStyle.background
-        settingsWindow.appearance = NSAppearance(named: .aqua); settingsWindow.center()
-        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
-            settingsWindow.standardWindowButton(kind)?.isHidden = true
-        }
+        settingsWindow.center()
         let root = Surface(frame: NSRect(origin: .zero, size: size))
         settingsWindow.contentView = root
         func frame(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect { NSRect(x: dp(x - 99), y: dp(y - 74), width: dp(w), height: dp(h)) }
         func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = frame(x, y, w, h); root.addSubview(view) }
         func text(_ field: NSTextField, _ x: CGFloat, _ centerY: CGFloat) { place(field, x: x - 99, centerY: centerY - 74); root.addSubview(field) }
 
-        let header = AquaTitlebar(); header.title = "给鼠标加一点魔法"; header.symbol = "heart"
-        put(header, 99, 74, 1341, 42)
-        let controls: [(Int, Int, String, Selector?)] = [
-            (0xF5A798, 0x9C3C25, "关闭", #selector(NSWindow.performClose(_:))),
-            (0xFBD689, 0xA5790A, "最小化", #selector(NSWindow.performMiniaturize(_:))),
-            (0x9FDDC3, 0x1D7D58, "缩放（此窗口为固定尺寸）", nil)
-        ]
-        let glyphs: [AquaWindowButton.Glyph] = [.close, .minimize, .zoom]
-        for (index, control) in controls.enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), glyph: glyphs[index], title: control.2, target: settingsWindow, action: control.3)
-            button.frame = NSRect(x: dp(24.5 + CGFloat(index) * 27) - 9, y: dp(21) - 8, width: 18, height: 16)
-            button.isEnabled = control.3 != nil
-            header.addSubview(button)
-        }
+        AquaStyle.installWindowChrome(in: settingsWindow, title: "给鼠标加一点魔法", symbol: "heart")
         put(BannerView(), 120, 136, 1300, 140)
         let dragTab = NSButton(title: "拖动效果", target: nil, action: nil)
         dragTab.identifier = NSUserInterfaceItemIdentifier("aquaTabOn")

@@ -524,17 +524,10 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
     func build() {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
-        window.appearance = NSAppearance(named: .aqua)
         window.title = "文件夹图标 · Luma Trail"; window.isReleasedWhenClosed = false; window.center()
-        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         let content = Surface(frame: NSRect(x: 0, y: 0, width: 760, height: 700)); window.contentView = content
-        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 760, height: 40)); content.addSubview(header)
-        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = true }
-        for (index, item) in [(0xE85B52, "关闭", #selector(NSWindow.performClose(_:))), (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:)))].enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: item.0), glyph: index == 0 ? .close : .minimize, title: item.1, target: window, action: item.2)
-            button.frame = NSRect(x: 12 + CGFloat(index) * 28, y: 7, width: 28, height: 26); header.addSubview(button)
-        }
-        let surface = Surface(frame: NSRect(x: 0, y: 40, width: 760, height: 660)); content.addSubview(surface)
+        AquaStyle.installWindowChrome(in: window)
+        let surface = Surface(frame: NSRect(x: 0, y: AquaStyle.titlebarHeight, width: 760, height: 700 - AquaStyle.titlebarHeight)); content.addSubview(surface)
         func put(_ v: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { v.frame = NSRect(x: x, y: y, width: w, height: h); surface.addSubview(v) }
         let muted = NSColor(hex: 0x526D82)
         put(label("文件夹图标", 23, .semibold), 28, 20, 500, 32)
@@ -681,9 +674,11 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         }
     }
     func buildSheet() {
-        sheet = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 720, height: 560), styleMask: [.titled], backing: .buffered, defer: false)
-        sheet.appearance = NSAppearance(named: .aqua)
-        let surface = Surface(frame: NSRect(x: 0, y: 0, width: 720, height: 560)); sheet.contentView = surface
+        let size = NSSize(width: 720, height: 560 + AquaStyle.titlebarHeight)
+        sheet = NSWindow(contentRect: NSRect(origin: .zero, size: size), styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+        let content = Surface(frame: NSRect(origin: .zero, size: size)); sheet.contentView = content
+        AquaStyle.installWindowChrome(in: sheet, showsWindowButtons: false)
+        let surface = Surface(frame: NSRect(x: 0, y: AquaStyle.titlebarHeight, width: 720, height: 560)); content.addSubview(surface)
         func put(_ v: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { v.frame = NSRect(x: x, y: y, width: w, height: h); surface.addSubview(v) }
         sheetTitle = label("", 18, .semibold); put(sheetTitle, 24, 18, 500, 26)
         summary = label("", 12); summary.maximumNumberOfLines = 6; put(summary, 24, 52, 672, 100)

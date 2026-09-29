@@ -160,17 +160,10 @@ final class CursorWindowController: NSObject {
     }
     func build() {
         window = NSWindow(contentRect:NSRect(x:0,y:0,width:690,height:630),styleMask:[.titled,.closable,.miniaturizable,.fullSizeContentView],backing:.buffered,defer:false)
-        window.appearance = NSAppearance(named: .aqua)
         window.title = "鼠标外观 · Luma Trail"; window.isReleasedWhenClosed = false; window.center()
-        window.titleVisibility = .hidden; window.titlebarAppearsTransparent = true
         let content = Surface(frame: NSRect(x: 0, y: 0, width: 690, height: 630)); window.contentView = content
-        let header = AquaTitlebar(frame: NSRect(x: 0, y: 0, width: 690, height: 40)); content.addSubview(header)
-        for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] { window.standardWindowButton(kind)?.isHidden = true }
-        for (index, item) in [(0xE85B52, "关闭", #selector(NSWindow.performClose(_:))), (0xEAB936, "最小化", #selector(NSWindow.performMiniaturize(_:)))].enumerated() {
-            let button = AquaWindowButton(tint: NSColor(hex: item.0), glyph: index == 0 ? .close : .minimize, title: item.1, target: window, action: item.2)
-            button.frame = NSRect(x: 12 + CGFloat(index) * 28, y: 7, width: 28, height: 26); header.addSubview(button)
-        }
-        let surface = Surface(frame:NSRect(x:0,y:40,width:690,height:590)); content.addSubview(surface)
+        AquaStyle.installWindowChrome(in: window)
+        let surface = Surface(frame: NSRect(x: 0, y: AquaStyle.titlebarHeight, width: 690, height: 630 - AquaStyle.titlebarHeight)); content.addSubview(surface)
         func put(_ v:NSView,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat,_ h:CGFloat) { v.frame = NSRect(x:x,y:y,width:w,height:h); surface.addSubview(v) }
         func button(_ title:String,_ action:Selector,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat) { let b = NSButton(title:title,target:self,action:action); b.bezelStyle = .rounded; put(b,x,y,w,30) }
         put(AquaGroup(), 18, 98, 270, 373)
