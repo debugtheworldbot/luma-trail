@@ -709,20 +709,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Single-row footer: Dock, version, update status, update controls and effects.
         let versionLabel = label(appUpdater.currentVersion, 11)
-        put(versionLabel, 460, 1208, 100, 28)
         let updateStatus = label(appUpdater.status, 11, .regular, AquaStyle.soft)
         updateStatus.lineBreakMode = .byTruncatingTail
-        put(updateStatus, 575, 1208, 190, 28)
         updateStatusLabel = updateStatus
         let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
         automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         automaticUpdates.font = .systemFont(ofSize: 11)
-        put(automaticUpdates, 780, 1207, 178, 28)
         automaticUpdateButton = automaticUpdates
         let checkUpdates = NSButton(title: "检查更新…", target: appUpdater, action: #selector(AppUpdater.checkForUpdates(_:)))
         checkUpdates.font = .systemFont(ofSize: 12)
-        put(checkUpdates, 973, 1202, 150, 41)
         updateCheckButton = checkUpdates
+        let updateControls = NSStackView(views: [versionLabel, updateStatus, automaticUpdates, checkUpdates])
+        updateControls.orientation = .horizontal
+        updateControls.alignment = .centerY
+        updateControls.spacing = dp(12)
+        updateControls.translatesAutoresizingMaskIntoConstraints = false
+        root.addSubview(updateControls)
+        NSLayoutConstraint.activate([
+            updateControls.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: dp(344 - 99)),
+            updateControls.centerYAnchor.constraint(equalTo: root.topAnchor, constant: dp(1222 - 74)),
+            updateStatus.widthAnchor.constraint(lessThanOrEqualToConstant: dp(260)),
+            checkUpdates.widthAnchor.constraint(equalToConstant: dp(150)),
+            checkUpdates.heightAnchor.constraint(equalToConstant: dp(41))
+        ])
         refreshUpdateUI()
 
         let dockButton = NSButton(checkboxWithTitle: "在 Dock 中显示", target: self, action: #selector(toggleDockVisibility(_:)))
