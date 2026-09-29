@@ -23,14 +23,11 @@ enum AquaStyle {
     // All app-owned windows share the settings window's chrome. Sheets keep modal controls in their content.
     static func installWindowChrome(in window: NSWindow, title: String = "Luma Trail", symbol: String? = nil, showsWindowButtons: Bool = true) {
         window.styleMask.insert(.fullSizeContentView)
+        window.styleMask.remove(.resizable)
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
         window.backgroundColor = background
         window.appearance = NSAppearance(named: .aqua)
-        if showsWindowButtons {
-            window.styleMask.insert(.resizable)
-            window.contentMinSize = window.contentView?.bounds.size ?? .zero
-        }
         for kind: NSWindow.ButtonType in [.closeButton, .miniaturizeButton, .zoomButton] {
             window.standardWindowButton(kind)?.isHidden = true
         }
@@ -42,8 +39,7 @@ enum AquaStyle {
         guard showsWindowButtons else { return }
         let controls: [(Int, Int, AquaWindowButton.Glyph, String, Selector?)] = [
             (0xF5A798, 0x9C3C25, .close, "关闭", #selector(NSWindow.performClose(_:))),
-            (0xFBD689, 0xA5790A, .minimize, "最小化", #selector(NSWindow.performMiniaturize(_:))),
-            (0x9FDDC3, 0x1D7D58, .zoom, "最大化 / 还原", #selector(NSWindow.performZoom(_:)))
+            (0xFBD689, 0xA5790A, .minimize, "最小化", #selector(NSWindow.performMiniaturize(_:)))
         ]
         for (index, control) in controls.enumerated() {
             let button = AquaWindowButton(tint: NSColor(hex: control.0), border: NSColor(hex: control.1), glyph: control.2, title: control.3, target: window, action: control.4)
