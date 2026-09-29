@@ -154,6 +154,7 @@ final class ThemeRow: NSButton {
     override var isFlipped: Bool { false }
     let theme: TrailTheme
     var selected = false { didSet { needsDisplay = true } }
+    var starTint: NSColor? { didSet { needsDisplay = true } }
     init(theme: TrailTheme, target: AnyObject, action: Selector) {
         self.theme = theme
         super.init(frame: .zero)
@@ -172,7 +173,8 @@ final class ThemeRow: NSButton {
                 symbol.draw(in: NSRect(x: art.midX - symbol.size.width / 2, y: art.midY - symbol.size.height / 2, width: symbol.size.width, height: symbol.size.height))
             }
         } else {
-            NSImage(cgImage: ParticlePainter.texture(theme: theme, color: theme.colors[0]), size: NSSize(width: 128, height: 128)).draw(in: art)
+            let swatch = theme.colors(tinted: starTint)[0]
+            NSImage(cgImage: ParticlePainter.texture(theme: theme, color: swatch), size: NSSize(width: 128, height: 128)).draw(in: art)
         }
         let attributes: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor(hex: 0x574A50)]
         let text = theme.title as NSString, size = text.size(withAttributes: attributes)
@@ -369,6 +371,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var valueLabels: [NSTextField] = []
     var enableButton: StatusButton!
     var burstButton: NSButton!
+    var starColorToggle: NSButton!
+    var starColorWell: NSColorWell!
     var hotKey: EventHotKeyRef?
     var eventHandler: EventHandlerRef?
     var suspended = false
@@ -539,6 +543,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             valueLabels[i].stringValue = i == 0 ? String(format: "%.0f", values[i]) : i == 1 ? String(format: "%.0f%%", values[i] * 100) : i == 2 ? String(format: "%.1f s", values[i]) : i == 3 ? String(format: "%.1f Hz", values[i]) : String(format: "%.0f%%", values[i] * 100)
         }
         burstButton.state = settings.clickBurst ? .on : .off
+        starColorToggle?.state = settings.starTintEnabled ? .on : .off
+        starColorWell?.color = NSColor(srgbRed: settings.starRed, green: settings.starGreen, blue: settings.starBlue, alpha: 1)
+    }
+    func applyStarTint() {
+        painter.applyStarTint(settings.starTint)
+        let tint = settings.starTint
+        themeButtons.forEach { $0.starTint = tint }
+        preview?.needsDisplay = true
+    }
+    @objc func toggleStarColor(_ sender: NSButton) {
+        if sender.state == .on { settings.setStarTint(starColorWell.color) } else { settings.starTintEnabled = false }
+        settings.save(); applyStarTint()
+    }
+    @objc func starColorChanged() {
+        settings.setStarTint(starColorWell.color)
+        starColorToggle.state = .on
+        settings.save(); applyStarTint()
     }
     @objc func toggleDockVisibility(_ sender: NSButton) {
         let showInDock = sender.state == .on
@@ -553,8 +574,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func toggleBurst(_ sender: NSButton) { settings.clickBurst = sender.state == .on; settings.save() }
     @objc func toggleBackground(_ sender: NSButton) { preview.light.toggle() }
     @objc func resetParameters() {
-        settings.size = 19; settings.density = 0.8; settings.lifetime = 1.25; settings.opacity = 0.88; settings.twinkleSpeed = 1.8; settings.clickBurst = true
-        settings.save(); updateValues(); clear()
+        settings.resetTuning()
+        settings.save(); updateValues(); applyStarTint(); clear()
     }
     @objc func importImage() {
         let picker = NSOpenPanel(); picker.allowedContentTypes = [.png, .jpeg, .tiff]
@@ -657,6 +678,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetParameters))
         reset.font = .systemFont(ofSize: 12); put(reset, 540, 1131, 132, 41)
+        starColorToggle = NSButton(checkboxWithTitle: "自定义星星颜色", target: self, action: #selector(toggleStarColor(_:)))
+        starColorToggle.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
+        starColorToggle.font = .systemFont(ofSize: 12)
+        starColorToggle.toolTip = "只改变星星：仙女星尘、银河星环、香槟仙尘、月牙星语、暖光火花。"
+        put(starColorToggle, 688, 1136, 248, 28)
+        starColorWell = NSColorWell()
+        starColorWell.target = self; starColorWell.action = #selector(starColorChanged)
+        starColorWell.toolTip = starColorToggle.toolTip
+        put(starColorWell, 948, 1128, 64, 44)
         burstButton = NSButton(checkboxWithTitle: "点击绽放效果", target: self, action: #selector(toggleBurst(_:)))
         burstButton.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
@@ -671,7 +701,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enableButton.on = settings.enabled
         put(enableButton, 1230, 1207, 172, 30)
         AquaStyle.install(in: root)
-        updateValues()
+        updateValues(); applyStarTint()
         if let selected = themeButtons.first(where: \.selected) { board.scrollToVisible(selected.frame.insetBy(dx: 0, dy: -ThemeRow.height)) }
     }
 }

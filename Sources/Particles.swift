@@ -133,6 +133,22 @@ enum TrailTheme: Int, CaseIterable {
         case .ripples: return [0x8EC7E6, 0xF2C6DE, 0xB7E3D3].map { NSColor(hex: $0) }
         }
     }
+    /// Star motifs whose texture palette can be replaced. Slot count stays equal to the built-in palette so particles already on screen keep a valid color index.
+    var supportsStarColor: Bool {
+        switch self {
+        case .stardust, .galaxy, .pixieDust, .moonStars, .sparkler: return true
+        default: return false
+        }
+    }
+    /// Built-in colors, or the same number of tints when a custom star color is active.
+    func colors(tinted base: NSColor?) -> [NSColor] {
+        guard supportsStarColor, let base else { return colors }
+        let tint = base.usingColorSpace(.sRGB) ?? base
+        let lifts: [CGFloat] = [0, 0.34, 0.16, 0.48]
+        return colors.indices.map { index in
+            tint.blended(withFraction: lifts[index % lifts.count], of: .white) ?? tint
+        }
+    }
     var usesRibbon: Bool { self == .rainbow || self == .comet || self == .aurora }
     var usesOrbit: Bool { self == .fireflies || self == .galaxy }
     var usesScatter: Bool { self == .stardust || self == .snowflakes || self == .pixieDust || self == .sparkler }
@@ -160,8 +176,21 @@ final class TrailSettings {
     var clickBurst = true
     var enabled = true
     var customData: Data?
-    init(persistent: Bool = true) {
-        defaults = persistent ? .standard : nil
+    /// Off restores each star theme's built-in palette. The stored components stay so the well can show the last pick.
+    var starTintEnabled = false
+    var starRed = TrailSettings.defaultStarRed
+    var starGreen = TrailSettings.defaultStarGreen
+    var starBlue = TrailSettings.defaultStarBlue
+    static let defaultStarRed = 242.0 / 255
+    static let defaultStarGreen = 76.0 / 255
+    static let defaultStarBlue = 184.0 / 255
+    var starTint: NSColor? {
+        guard starTintEnabled else { return nil }
+        return NSColor(srgbRed: starRed, green: starGreen, blue: starBlue, alpha: 1)
+    }
+    convenience init(persistent: Bool = true) { self.init(defaults: persistent ? .standard : nil) }
+    init(defaults: UserDefaults?) {
+        self.defaults = defaults
         guard let d = defaults else { return }
         theme = TrailTheme(rawValue: d.integer(forKey: "theme")) ?? .stardust
         func value(_ key: String, _ fallback: Double, _ range: ClosedRange<Double>) -> Double {
@@ -178,6 +207,22 @@ final class TrailSettings {
         enabled = d.object(forKey: "enabled") == nil ? true : d.bool(forKey: "enabled")
         customData = d.data(forKey: "customImage")
         if theme == .custom && customData == nil { theme = .stardust }
+        starTintEnabled = d.bool(forKey: "starTintEnabled")
+        starRed = value("starRed", Self.defaultStarRed, 0...1)
+        starGreen = value("starGreen", Self.defaultStarGreen, 0...1)
+        starBlue = value("starBlue", Self.defaultStarBlue, 0...1)
+    }
+    func setStarTint(_ color: NSColor?) {
+        guard let color, let c = color.usingColorSpace(.sRGB) else { starTintEnabled = false; return }
+        starRed = min(1, max(0, Double(c.redComponent)))
+        starGreen = min(1, max(0, Double(c.greenComponent)))
+        starBlue = min(1, max(0, Double(c.blueComponent)))
+        starTintEnabled = true
+    }
+    func resetTuning() {
+        size = 19; density = 0.8; lifetime = 1.25; opacity = 0.88; twinkleSpeed = 1.8; clickBurst = true
+        starTintEnabled = false
+        starRed = Self.defaultStarRed; starGreen = Self.defaultStarGreen; starBlue = Self.defaultStarBlue
     }
     func save() {
         guard let d = defaults else { return }
@@ -186,6 +231,8 @@ final class TrailSettings {
         d.set(opacity, forKey: "opacity"); d.set(clickBurst, forKey: "clickBurst")
         d.set(twinkleSpeed, forKey: "twinkleSpeed")
         d.set(enabled, forKey: "enabled"); d.set(customData, forKey: "customImage")
+        d.set(starTintEnabled, forKey: "starTintEnabled")
+        d.set(starRed, forKey: "starRed"); d.set(starGreen, forKey: "starGreen"); d.set(starBlue, forKey: "starBlue")
     }
 }
 
@@ -418,6 +465,15 @@ final class ParticlePainter {
     init() {
         for theme in TrailTheme.allCases where theme != .custom && theme != .mixed {
             for color in theme.colors.indices { textures["\(theme.rawValue)-\(color)"] = Self.texture(theme: theme, color: theme.colors[color]) }
+        }
+    }
+    /// Rebuilds only star textures. Passing nil restores each theme's built-in palette.
+    func applyStarTint(_ color: NSColor?) {
+        let tint = color?.usingColorSpace(.sRGB)
+        for theme in TrailTheme.allCases where theme.supportsStarColor {
+            for (index, swatch) in theme.colors(tinted: tint).enumerated() {
+                textures["\(theme.rawValue)-\(index)"] = Self.texture(theme: theme, color: swatch)
+            }
         }
     }
     func loadCustom(_ data: Data?) {
@@ -972,6 +1028,74 @@ func runParticleTests() {
     print("PASS: smooth rainbow endpoint, separate paths, eased expiry, both halo pixels and bounds")
     print("PASS: rainbow continuity, no drift, teleport, expiry, stable theme values")
     print("PASS: movement, expiry, teleport, cap, reset, idle; no stop emission, retained click burst")
+    runStarColorTests()
+}
+
+func runStarColorTests() {
+    let blue = NSColor(srgbRed: 0.12, green: 0.28, blue: 0.86, alpha: 1)
+    for theme in TrailTheme.allCases where theme.supportsStarColor {
+        let tinted = theme.colors(tinted: blue)
+        precondition(tinted.count == theme.colors.count, "\(theme.title) must keep its palette length")
+        let first = tinted[0].usingColorSpace(.sRGB)!
+        precondition(abs(first.redComponent - 0.12) < 0.02 && abs(first.blueComponent - 0.86) < 0.02,
+                     "\(theme.title) primary swatch must be the chosen color")
+    }
+    for theme in TrailTheme.allCases where !theme.supportsStarColor {
+        let original = theme.colors, tinted = theme.colors(tinted: blue)
+        precondition(original.count == tinted.count)
+        for (left, right) in zip(original, tinted) {
+            let a = left.usingColorSpace(.sRGB)!, b = right.usingColorSpace(.sRGB)!
+            precondition(abs(a.redComponent - b.redComponent) < 0.001 && abs(a.greenComponent - b.greenComponent) < 0.001 &&
+                         abs(a.blueComponent - b.blueComponent) < 0.001, "\(theme.title) must ignore the star color")
+        }
+    }
+    func centerPixel(_ image: CGImage) -> (UInt8, UInt8, UInt8, UInt8) {
+        let probe = CGContext(data: nil, width: image.width, height: image.height, bitsPerComponent: 8, bytesPerRow: 0,
+                              space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        probe.draw(image, in: CGRect(x: 0, y: 0, width: image.width, height: image.height))
+        let pixels = probe.data!.assumingMemoryBound(to: UInt8.self)
+        let i = image.height / 2 * probe.bytesPerRow + image.width / 2 * 4
+        return (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3])
+    }
+    let swatch = centerPixel(ParticlePainter.texture(theme: .stardust, color: TrailTheme.stardust.colors(tinted: blue)[0]))
+    precondition(swatch.3 > 200 && swatch.2 > 180 && swatch.2 > swatch.0 + 80 && swatch.2 > swatch.1 + 80,
+                 "Stardust fill must be the custom color")
+    let painter = ParticlePainter()
+    painter.applyStarTint(blue)
+    func painted(_ theme: TrailTheme) -> (UInt8, UInt8, UInt8, UInt8) {
+        let ctx = CGContext(data: nil, width: 128, height: 128, bitsPerComponent: 8, bytesPerRow: 0,
+                            space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        ctx.setFillColor(NSColor.black.cgColor); ctx.fill(CGRect(x: 0, y: 0, width: 128, height: 128))
+        let particle = Particle(x: 64, y: 64, vx: 0, vy: 0, born: 0, life: 5, size: 90, angle: 0, spin: 0,
+                                phase: .pi / 2, color: 0, theme: theme, alpha: 1)
+        painter.draw([particle], in: ctx, at: 0.05, twinkleSpeed: 1)
+        let pixels = ctx.data!.assumingMemoryBound(to: UInt8.self)
+        let i = 64 * ctx.bytesPerRow + 64 * 4
+        return (pixels[i], pixels[i + 1], pixels[i + 2], pixels[i + 3])
+    }
+    let star = painted(.stardust)
+    precondition(star.2 > star.0 + 40 && star.2 > star.1 + 40, "Cached stardust texture must use the custom color")
+    let heart = painted(.hearts)
+    precondition(heart.0 > heart.2 + 20, "Non-star themes must keep their built-in color")
+    let suiteName = "studio.luma.trail.star-color-tests"
+    let suite = UserDefaults(suiteName: suiteName)!
+    suite.removePersistentDomain(forName: suiteName)
+    let saved = TrailSettings(defaults: suite)
+    precondition(saved.starTint == nil, "Star color starts off")
+    saved.setStarTint(blue); saved.save()
+    let loaded = TrailSettings(defaults: suite)
+    let got = loaded.starTint!.usingColorSpace(.sRGB)!
+    precondition(abs(got.redComponent - 0.12) < 0.01 && abs(got.greenComponent - 0.28) < 0.01 && abs(got.blueComponent - 0.86) < 0.01,
+                 "Custom star color must round-trip")
+    loaded.starTintEnabled = false; loaded.save()
+    precondition(TrailSettings(defaults: suite).starTint == nil, "Turning the color off must restore built-in palettes")
+    let reset = TrailSettings(defaults: suite)
+    reset.setStarTint(blue); reset.resetTuning(); reset.save()
+    let restored = TrailSettings(defaults: suite)
+    precondition(restored.starTint == nil && abs(restored.starRed - TrailSettings.defaultStarRed) < 0.001,
+                 "Reset must clear the custom star color")
+    suite.removePersistentDomain(forName: suiteName)
+    print("PASS: custom star color palette, texture cache, and persistence")
 }
 
 /// Deterministic visual fixture using the production simulation and painter.
