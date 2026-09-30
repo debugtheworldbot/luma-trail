@@ -1,5 +1,6 @@
 import AppKit
 import Carbon
+import QuartzCore
 import UniformTypeIdentifiers
 
 final class OverlayPanel: NSPanel {
@@ -354,10 +355,11 @@ final class PreviewView: NSView {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    enum SettingsTab { case trail, cursor }
     let appUpdater = AppUpdater()
     var updateCheckButton: NSButton?
     var automaticUpdateButton: NSButton?
-    var cursorAppearance: CursorWindowController?
+    var cursorAppearance: CursorAppearanceController?
     let folderIcons = FolderIconWindowController()
     let settings = TrailSettings()
     let system = ParticleSystem()
@@ -368,6 +370,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var timerHz = 0.0
     var statusItem: NSStatusItem!
     var settingsWindow: NSWindow!
+    var settingsContent: NSView!
+    var trailContent: NSView!
+    var settingsTabs: [NSButton] = []
+    var selectedSettingsTab = SettingsTab.trail
     var preview: PreviewView!
     var themeButtons: [ThemeRow] = []
     var sliders: [NSSlider] = []
@@ -387,7 +393,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if let other = NSRunningApplication.runningApplications(withBundleIdentifier: "studio.luma.trail.mvp").first(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
             other.activate(options: [.activateAllWindows]); NSApp.terminate(nil); return
         }
-        cursorAppearance = CursorWindowController()
+        cursorAppearance = CursorAppearanceController()
+        _ = cursorAppearance?.manager.restore()
         painter.loadCustom(settings.customData)
         buildMainMenu(); buildWindow(); buildStatusMenu(); buildOverlays(); configureHotkey()
         appUpdater.onChange = { [weak self] in self?.refreshUpdateUI() }
@@ -401,7 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         workspace.addObserver(self, selector: #selector(resume), name: NSWorkspace.sessionDidBecomeActiveNotification, object: nil)
         applyEnabled(); showSettings()
         previewTimer = Timer(timeInterval: 1.0 / 30, repeats: true) { [weak self] _ in
-            guard let self, self.settingsWindow.isVisible, !self.suspended else { return }
+            guard let self, self.settingsWindow.isVisible, self.selectedSettingsTab == .trail, !self.suspended else { return }
             self.preview.step()
         }
         RunLoop.main.add(previewTimer!, forMode: .common)
@@ -521,7 +528,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         enableButton?.on = settings.enabled
         buildStatusMenu(); preview?.needsDisplay = true
     }
-    @objc func showCursorAppearance() { cursorAppearance?.show() }
+    @objc func showCursorAppearance() { selectSettingsTab(.cursor); showSettings() }
+    @objc func showTrailEffects() { selectSettingsTab(.trail) }
+    func selectSettingsTab(_ tab: SettingsTab, animated: Bool = true) {
+        guard tab != selectedSettingsTab else { return }
+        if tab == .cursor {
+            if cursorAppearance == nil { cursorAppearance = CursorAppearanceController() }
+            if cursorAppearance?.view == nil {
+                let view = cursorAppearance!.buildView(size: settingsContent.bounds.size)
+                view.wantsLayer = true; view.isHidden = true
+                settingsContent.addSubview(view)
+            }
+        }
+        guard let cursorContent = cursorAppearance?.view else { return }
+        let incoming = tab == .trail ? trailContent! : cursorContent
+        settingsWindow.makeFirstResponder(nil)
+        if starColorWell.isActive { starColorWell.deactivate() }
+        if let color = cursorAppearance?.color, color.isActive { color.deactivate() }
+        settingsContent.layer?.removeAnimation(forKey: "tabTransition")
+        for view in [trailContent!, cursorContent] { view.layer?.removeAnimation(forKey: "tabSlide") }
+        let shouldAnimate = animated && settingsWindow.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+        if shouldAnimate {
+            let fade = CATransition()
+            fade.type = .fade; fade.duration = 0.26
+            fade.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+            settingsContent.layer?.add(fade, forKey: "tabTransition")
+        }
+        selectedSettingsTab = tab
+        trailContent.isHidden = tab != .trail
+        cursorContent.isHidden = tab != .cursor
+        for (index, button) in settingsTabs.enumerated() {
+            let selected = index == (tab == .trail ? 0 : 1)
+            button.state = selected ? .on : .off
+            (button.cell as? AquaButtonCell)?.pink = selected
+            button.needsDisplay = true
+        }
+        if shouldAnimate {
+            let slide = CABasicAnimation(keyPath: "transform.translation.x")
+            slide.fromValue = tab == .cursor ? 14.0 : -14.0; slide.toValue = 0
+            slide.duration = 0.26
+            slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            incoming.layer?.add(slide, forKey: "tabSlide")
+        }
+    }
     @objc func showFolderIcons() { folderIcons.show() }
     @objc func showSettings() { settingsWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func chooseTheme(_ sender: ThemeRow) {
@@ -621,17 +670,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settingsWindow.center()
         let root = Surface(frame: NSRect(origin: .zero, size: size))
         settingsWindow.contentView = root
-        func frame(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect { NSRect(x: dp(x - 99), y: dp(y - 74), width: dp(w), height: dp(h)) }
-        func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = frame(x, y, w, h); root.addSubview(view) }
-        func text(_ field: NSTextField, _ x: CGFloat, _ centerY: CGFloat) { place(field, x: x - 99, centerY: centerY - 74); root.addSubview(field) }
+        var container: NSView = root
+        var contentOrigin = NSPoint.zero
+        func frame(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect { NSRect(x: dp(x - 99) - contentOrigin.x, y: dp(y - 74) - contentOrigin.y, width: dp(w), height: dp(h)) }
+        func put(_ view: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { view.frame = frame(x, y, w, h); container.addSubview(view) }
+        func text(_ field: NSTextField, _ x: CGFloat, _ centerY: CGFloat) {
+            place(field, x: x - 99, centerY: centerY - 74)
+            field.frame.origin.x -= contentOrigin.x; field.frame.origin.y -= contentOrigin.y
+            container.addSubview(field)
+        }
 
         AquaStyle.installWindowChrome(in: settingsWindow, title: "给鼠标加一点魔法", symbol: "heart")
         put(BannerView(), 120, 136, 1300, 140)
-        let dragTab = NSButton(title: "拖动效果", target: nil, action: nil)
+        let dragTab = NSButton(title: "拖动效果", target: self, action: #selector(showTrailEffects))
         dragTab.identifier = NSUserInterfaceItemIdentifier("aquaTabOn")
+        dragTab.state = .on
         let cursorTab = NSButton(title: "鼠标美化", target: self, action: #selector(showCursorAppearance))
         cursorTab.identifier = NSUserInterfaceItemIdentifier("aquaTab")
         for (i, tab) in [dragTab, cursorTab].enumerated() { tab.font = .systemFont(ofSize: 13); put(tab, 600 + CGFloat(i) * 180, 296, 160, 45) }
+        settingsTabs = [dragTab, cursorTab]
+        settingsContent = Surface(frame: frame(120, 360, 1300, 830))
+        settingsContent.wantsLayer = true; settingsContent.layer?.masksToBounds = true
+        root.addSubview(settingsContent)
+        trailContent = Surface(frame: settingsContent.bounds)
+        trailContent.wantsLayer = true
+        settingsContent.addSubview(trailContent)
+        container = trailContent; contentOrigin = settingsContent.frame.origin
 
         // Effect library.
         put(AquaGroup(title: "效果库"), 120, 360, 380, 828)
@@ -669,7 +733,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for i in 0..<5 {
             let rect = frame(540 + CGFloat(i % 2) * 440, 771 + CGFloat(i / 2) * 120, i == 4 ? 860 : 420, 100)
             let card = SliderCard(frame: rect, name: names[i], range: ranges[i], tag: i, target: self, action: #selector(parameterChanged(_:)))
-            sliders.append(card.slider); valueLabels.append(card.value); root.addSubview(card)
+            sliders.append(card.slider); valueLabels.append(card.value); container.addSubview(card)
         }
         let reset = NSButton(title: "恢复默认", target: self, action: #selector(resetParameters))
         reset.font = .systemFont(ofSize: 12); put(reset, 540, 1131, 132, 41)
@@ -687,6 +751,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         burstButton.font = .systemFont(ofSize: 12); put(burstButton, 1259.5, 1136, 142, 28)
 
         // Single-row footer: Dock, version, update controls and effects.
+        container = root; contentOrigin = .zero
         let versionLabel = label(appUpdater.currentVersion, 11)
         let automaticUpdates = NSButton(checkboxWithTitle: "自动检查更新", target: appUpdater, action: #selector(AppUpdater.toggleAutomaticChecks(_:)))
         automaticUpdates.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox")
@@ -756,6 +821,7 @@ if CommandLine.arguments.contains("--preview-stress-test") {
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-settings"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
     let delegate = AppDelegate(); delegate.buildWindow()
+    if CommandLine.arguments.contains("--cursor-tab") { delegate.selectSettingsTab(.cursor, animated: false) }
     delegate.preview.step()
     let view = delegate.settingsWindow.contentView!
     view.display()

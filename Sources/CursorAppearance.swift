@@ -141,9 +141,9 @@ final class CursorCanvas: NSView {
         onHotspot?(hotspot); needsDisplay = true
     }
 }
-final class CursorWindowController: NSObject {
+final class CursorAppearanceController: NSObject {
     let manager = CursorManager()
-    var window: NSWindow!
+    var view: NSView?
     var picker: NSPopUpButton!
     var canvas: CursorCanvas!
     var color: NSColorWell!
@@ -153,42 +153,37 @@ final class CursorWindowController: NSObject {
     var note: NSTextField!
     var status: NSTextField!
     var selected: CursorKind { CursorKind.all[picker.indexOfSelectedItem] }
-    override init() { super.init(); _ = manager.restore() }
-    @objc func show() {
-        if window == nil { build() }
-        refresh(); window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps:true)
-    }
-    func build() {
-        window = NSWindow(contentRect:NSRect(x:0,y:0,width:690,height:630),styleMask:[.titled,.closable,.miniaturizable,.fullSizeContentView],backing:.buffered,defer:false)
-        window.title = "鼠标外观 · Luma Trail"; window.isReleasedWhenClosed = false; window.center()
-        let content = Surface(frame: NSRect(x: 0, y: 0, width: 690, height: 630)); window.contentView = content
-        AquaStyle.installWindowChrome(in: window)
-        let surface = Surface(frame: NSRect(x: 0, y: AquaStyle.titlebarHeight, width: 690, height: 630 - AquaStyle.titlebarHeight)); content.addSubview(surface)
+    func buildView(size contentSize: NSSize) -> NSView {
+        if let view { return view }
+        let surface = Surface(frame: NSRect(origin: .zero, size: contentSize))
+        view = surface
         func put(_ v:NSView,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat,_ h:CGFloat) { v.frame = NSRect(x:x,y:y,width:w,height:h); surface.addSubview(v) }
         func button(_ title:String,_ action:Selector,_ x:CGFloat,_ y:CGFloat,_ w:CGFloat) { let b = NSButton(title:title,target:self,action:action); b.bezelStyle = .rounded; put(b,x,y,w,30) }
-        put(AquaGroup(), 18, 98, 270, 373)
-        put(AquaGroup(), 302, 98, 371, 373)
-        put(label("让鼠标也有自己的风格",23,.semibold),28,24,600,32)
-        put(label("为每种状态选择图片，或给系统鼠标换个颜色。",12),28,65,610,24)
-        picker = NSPopUpButton(); picker.addItems(withTitles:CursorKind.all.map(\.title)); picker.target = self; picker.action = #selector(selectionChanged); put(picker,28,109,250,32)
-        canvas = CursorCanvas(); put(canvas,28,154,250,234)
+        put(AquaGroup(), 18, 74, 270, 373)
+        put(AquaGroup(), 302, 74, contentSize.width - 320, 373)
+        put(label("让鼠标也有自己的风格",23,.semibold),28,8,contentSize.width - 56,32)
+        put(label("为每种状态选择图片，或给系统鼠标换个颜色。",12),28,45,contentSize.width - 56,24)
+        picker = NSPopUpButton(); picker.addItems(withTitles:CursorKind.all.map(\.title)); picker.target = self; picker.action = #selector(selectionChanged); put(picker,28,85,250,32)
+        canvas = CursorCanvas(); put(canvas,28,130,250,234)
         canvas.onHotspot = { [weak self] p in guard let self else {return}; var a = self.manager.asset(for:self.selected); a.x = p.x; a.y = p.y; self.manager.theme.assets[self.selected.id] = a; self.changed(); self.refresh() }
-        put(label("点击预览设置热点（真正的点击位置）",11),28,398,270,22)
-        note = label("",11); put(note,28,426,280,42); note.maximumNumberOfLines = 2
-        button("导入当前状态图片…",#selector(importResource),314,109,220)
-        button("清除当前状态设置",#selector(clearResource),314,150,220)
-        put(label("支持透明 PNG、JPEG、TIFF，单张 ≤ 10 MB。",11),314,190,350,20)
-        put(label("未设置的保持原样；系统彩色等待球暂不支持。",11),314,213,350,20)
-        tint = NSButton(checkboxWithTitle:"统一染色（关闭则保留图片原色）",target:self,action:#selector(colorChanged)); tint.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox"); put(tint,314,259,350,25)
-        color = NSColorWell(); color.target = self; color.action = #selector(colorChanged); put(color,316,299,60,32)
-        put(label("鼠标颜色",12),391,305,130,22)
-        put(label("当前状态大小",12),314,357,150,22)
-        size = NSSlider(value:32,minValue:16,maxValue:64,target:self,action:#selector(sizeChanged)); size.isContinuous = true; size.setAccessibilityLabel("鼠标大小"); put(size,314,387,270,26)
-        sizeLabel = label("",12); put(sizeLabel,591,391,70,22)
-        status = label("修改后点击应用。退出应用时自动恢复原鼠标。",11); status.maximumNumberOfLines = 3; put(status,28,475,632,48)
-        button("恢复原鼠标",#selector(restore),28,538,150)
-        button("应用鼠标外观",#selector(apply),483,538,178)
+        put(label("点击预览设置热点（真正的点击位置）",11),28,374,250,22)
+        note = label("",11); put(note,28,402,250,42); note.maximumNumberOfLines = 2
+        button("导入当前状态图片…",#selector(importResource),314,85,220)
+        button("清除当前状态设置",#selector(clearResource),314,126,220)
+        put(label("支持透明 PNG、JPEG、TIFF，单张 ≤ 10 MB。",11),314,166,350,20)
+        put(label("未设置的保持原样；系统彩色等待球暂不支持。",11),314,189,350,20)
+        tint = NSButton(checkboxWithTitle:"统一染色（关闭则保留图片原色）",target:self,action:#selector(colorChanged)); tint.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox"); put(tint,314,235,350,25)
+        color = NSColorWell(); color.target = self; color.action = #selector(colorChanged); put(color,316,275,60,32)
+        put(label("鼠标颜色",12),391,281,130,22)
+        put(label("当前状态大小",12),314,333,150,22)
+        size = NSSlider(value:32,minValue:16,maxValue:64,target:self,action:#selector(sizeChanged)); size.isContinuous = true; size.setAccessibilityLabel("鼠标大小"); put(size,314,363,contentSize.width - 420,26)
+        sizeLabel = label("",12); put(sizeLabel,contentSize.width - 99,367,70,22)
+        status = label("修改后点击应用。退出应用时自动恢复原鼠标。",11); status.maximumNumberOfLines = 3; put(status,28,451,contentSize.width - 56,48)
+        button("恢复原鼠标",#selector(restore),28,contentSize.height - 39,150)
+        button("应用鼠标外观",#selector(apply),contentSize.width - 207,contentSize.height - 39,178)
         AquaStyle.install(in: surface)
+        refresh()
+        return surface
     }
     func refresh() {
         let a = manager.asset(for:selected)
@@ -211,6 +206,7 @@ final class CursorWindowController: NSObject {
     @objc func apply() { status.stringValue = manager.apply() }
     @objc func restore() { status.stringValue = manager.restore() ? "已恢复原鼠标。上传的图片和颜色设置仍保留。" : "恢复失败，请重试；若仍失败，请注销后重新登录。" }
     @objc func importResource() {
+        guard let window = view?.window else { return }
         let target = selected.id
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.png,.jpeg,.tiff]; panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
         panel.message = "给“\(selected.title)”选择静态鼠标图片，建议透明 PNG。"; panel.prompt = "导入鼠标"
