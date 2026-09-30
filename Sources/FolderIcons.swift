@@ -468,11 +468,11 @@ final class FolderSlotTile: NSView {
     }
 }
 
-final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
+final class FolderIconController: NSObject, NSTableViewDataSource, NSTableViewDelegate {
     let library = FolderIconLibrary()
     lazy var engine = FolderIconEngine(library: library)
     var options = FolderIconOptions.load()
-    var window: NSWindow!
+    var view: NSView?
     var pathLabel: NSTextField!
     var checks: [NSButton] = []
     var iconArea: AquaGroup!
@@ -502,7 +502,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         guard !roots.isEmpty else { return }
         var context = FSEventStreamContext(version: 0, info: Unmanaged.passUnretained(self).toOpaque(), retain: nil, release: nil, copyDescription: nil)
         let callback: FSEventStreamCallback = { _, info, count, paths, flags, _ in
-            let controller = Unmanaged<FolderIconWindowController>.fromOpaque(info!).takeUnretainedValue()
+            let controller = Unmanaged<FolderIconController>.fromOpaque(info!).takeUnretainedValue()
             let paths = unsafeBitCast(paths, to: NSArray.self) as? [String] ?? []
             // A tag change reports the folder itself; content changes report a child.
             let keys = Set(paths.flatMap { [$0, ($0 as NSString).deletingLastPathComponent] }.map(FolderIconEngine.key))
@@ -518,44 +518,40 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         self.stream = stream
     }
 
-    @objc func show() {
-        if window == nil { build() }
-        window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
-    }
-    func build() {
-        window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 760, height: 700), styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView], backing: .buffered, defer: false)
-        window.title = "文件夹图标 · Luma Trail"; window.isReleasedWhenClosed = false; window.center()
-        let content = Surface(frame: NSRect(x: 0, y: 0, width: 760, height: 700)); window.contentView = content
-        AquaStyle.installWindowChrome(in: window)
-        let surface = Surface(frame: NSRect(x: 0, y: AquaStyle.titlebarHeight, width: 760, height: 700 - AquaStyle.titlebarHeight)); content.addSubview(surface)
+    func buildView(size: NSSize) -> NSView {
+        if let view { return view }
+        let surface = Surface(frame: NSRect(origin: .zero, size: size))
+        view = surface
         func put(_ v: NSView, _ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) { v.frame = NSRect(x: x, y: y, width: w, height: h); surface.addSubview(v) }
         let muted = NSColor(hex: 0x526D82)
-        put(label("文件夹图标", 23, .semibold), 28, 20, 500, 32)
-        put(label("按 Finder 标签颜色批量更换图标，已有自定义图标的文件夹始终保留。", 12, .regular, muted), 28, 58, 640, 22)
-        put(AquaGroup(), 18, 92, 724, 150)
-        put(label("处理文件夹", 12, .semibold), 30, 102, 200, 20)
-        pathLabel = label("", 12); pathLabel.lineBreakMode = .byTruncatingMiddle; put(pathLabel, 30, 127, 560, 20)
-        let choose = NSButton(title: "选择文件夹…", target: self, action: #selector(chooseRoot)); choose.bezelStyle = .rounded; put(choose, 600, 120, 130, 30)
+        put(label("文件夹图标", 23, .semibold), 28, 8, 500, 32)
+        put(label("按 Finder 标签颜色批量更换图标，已有自定义图标的文件夹始终保留。", 12, .regular, muted), 28, 45, size.width - 56, 22)
+        put(AquaGroup(), 18, 74, size.width - 36, 140)
+        put(label("处理文件夹", 12, .semibold), 30, 84, 200, 20)
+        pathLabel = label("", 12); pathLabel.lineBreakMode = .byTruncatingMiddle; put(pathLabel, 30, 109, size.width - 200, 20)
+        let choose = NSButton(title: "选择文件夹…", target: self, action: #selector(chooseRoot)); choose.bezelStyle = .rounded; put(choose, size.width - 160, 102, 130, 30)
         let items: [(String, String)] = [("处理子文件夹", "包含所有层级的子文件夹"), ("区分空文件夹", "分别设置空文件夹和有内容的文件夹图标"), ("处理当前文件夹", "同时修改当前选择的文件夹")]
         for (i, item) in items.enumerated() {
             let check = NSButton(checkboxWithTitle: item.0, target: self, action: #selector(optionChanged(_:)))
             check.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox"); check.font = .systemFont(ofSize: 12); check.tag = i
-            checks.append(check); put(check, 30 + CGFloat(i) * 240, 156, 230, 24)
-            put(label(item.1, 10, .regular, muted), 53 + CGFloat(i) * 240, 180, 210, 16)
+            let columnWidth = (size.width - 60) / 3
+            checks.append(check); put(check, 30 + CGFloat(i) * columnWidth, 138, columnWidth - 10, 24)
+            put(label(item.1, 10, .regular, muted), 53 + CGFloat(i) * columnWidth, 162, columnWidth - 33, 16)
         }
         let keep = NSButton(checkboxWithTitle: "保留已有自定义图标", target: nil, action: nil)
         keep.identifier = NSUserInterfaceItemIdentifier("aquaCheckbox"); keep.font = .systemFont(ofSize: 12); keep.state = .on
-        put(keep, 30, 207, 200, 24)
-        put(label("始终开启：已有自定义图标的文件夹一律跳过", 10, .regular, muted), 234, 211, 400, 16)
-        iconArea = AquaGroup(); put(iconArea, 18, 252, 724, 346)
-        status = label("", 11, .regular, muted); status.maximumNumberOfLines = 2; put(status, 28, 610, 440, 36)
+        put(keep, 30, 184, 200, 24)
+        put(label("始终开启：已有自定义图标的文件夹一律跳过", 10, .regular, muted), 234, 188, 400, 16)
+        iconArea = AquaGroup(); put(iconArea, 18, 226, size.width - 36, size.height - 288)
+        status = label("", 11, .regular, muted); status.maximumNumberOfLines = 2; put(status, 28, size.height - 50, size.width - 320, 42)
         resetButton = NSButton(title: "全部恢复默认", target: self, action: #selector(resetAll)); resetButton.bezelStyle = .rounded
-        put(resetButton, 480, 612, 130, 32)
+        put(resetButton, size.width - 280, size.height - 43, 130, 32)
         previewButton = NSButton(title: "预览", target: self, action: #selector(startPreview)); previewButton.bezelStyle = .rounded
-        put(previewButton, 620, 612, 120, 32)
+        put(previewButton, size.width - 140, size.height - 43, 120, 32)
         AquaStyle.install(in: surface)
         keep.isEnabled = false
         refresh()
+        return surface
     }
     func refresh() {
         pathLabel.stringValue = options.root ?? "尚未选择"
@@ -589,16 +585,19 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         if options.splitEmpty {
             // One column per color: empty folders on top, folders with content below.
             for (row, suffix) in [".empty", ".full"].enumerated() {
-                let y = 64 + CGFloat(row) * 124
+                let rowHeight = (iconArea.bounds.height - 46) / 2
+                let y = 42 + CGFloat(row) * rowHeight
                 add(label(row == 0 ? "空文件夹" : "有内容", 11, .medium, muted), 14, y + 30, 66, 16)
                 // Tiles shrink to fit if the system offers more colors.
-                let width = min(79, 632 / CGFloat(colors.count))
+                let width = (iconArea.bounds.width - 92) / CGFloat(colors.count)
+                let height = min(96, width + 17, rowHeight - 4)
                 for (column, color) in colors.enumerated() {
-                    add(tile(color, suffix: suffix, caption: color?.title ?? "无标签"), 80 + CGFloat(column) * width, y, width - 1, width + 17)
+                    add(tile(color, suffix: suffix, caption: color?.title ?? "无标签"), 80 + CGFloat(column) * width, y, width - 1, height)
                 }
             }
         } else {
-            let columns = max(4, (colors.count + 1) / 2), width = 684 / CGFloat(columns), height = min(140, width * 0.82)
+            let columns = max(4, (colors.count + 1) / 2), width = (iconArea.bounds.width - 40) / CGFloat(columns)
+            let height = min(140, width * 0.82, (iconArea.bounds.height - 64) / 2)
             for (index, color) in colors.enumerated() {
                 add(tile(color, suffix: nil, caption: color.map { $0.title + "标签" } ?? "无标签"), 20 + CGFloat(index % columns) * width, 42 + CGFloat(index / columns) * (height + 10), width, height)
             }
@@ -610,6 +609,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         options.save(); refresh()
     }
     @objc func chooseRoot() {
+        guard let window = view?.window else { return }
         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
         panel.canCreateDirectories = false; panel.prompt = "选择"; panel.message = "选择要处理的文件夹"
         if let root = options.root { panel.directoryURL = URL(fileURLWithPath: root) }
@@ -620,6 +620,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
         }
     }
     func upload(_ slot: String) {
+        guard let window = view?.window else { return }
         let panel = NSOpenPanel(); panel.allowedContentTypes = [.png, .jpeg, .heic, .tiff, .icns]
         panel.allowsMultipleSelection = false; panel.canChooseDirectories = false
         panel.message = "为“\(folderSlotTitle(slot))”选择图片，透明背景 PNG 或 ICNS 效果最好。"; panel.prompt = "上传"
@@ -635,6 +636,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
     // Undoes everything: folder icons written by this app, slot images, options and the chosen folder.
     @objc func resetAll() {
+        guard let window = view?.window else { return }
         let count = engine.restorable
         let alert = NSAlert(); alert.messageText = "全部恢复默认？"
         alert.informativeText = "将把本应用修改过的 \(count) 个文件夹恢复为原生图标，并清除所有已设置的图标、选项和所选文件夹。之后被你手动换过图标的文件夹会保留。"
@@ -653,7 +655,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
 
     // MARK: Preview → confirm → apply → result
     @objc func startPreview() {
-        guard let path = options.root else { return }
+        guard let window = view?.window, let path = options.root else { return }
         let url = URL(fileURLWithPath: path)
         if let problem = FolderInspector.rootProblem(url) { status.stringValue = problem; return }
         root = url; items = []; rows = []; token = CancelToken(); phase = "scan"
@@ -716,7 +718,7 @@ final class FolderIconWindowController: NSObject, NSTableViewDataSource, NSTable
     }
     @objc func leftAction() {
         if phase == "apply" { token.cancel(); return }
-        token.cancel(); window.endSheet(sheet); sheet = nil
+        token.cancel(); sheet.sheetParent?.endSheet(sheet); sheet = nil
     }
     @objc func confirm() {
         guard let root else { return }

@@ -355,12 +355,12 @@ final class PreviewView: NSView {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    enum SettingsTab { case trail, cursor }
+    enum SettingsTab: Int { case trail, cursor, folders }
     let appUpdater = AppUpdater()
     var updateCheckButton: NSButton?
     var automaticUpdateButton: NSButton?
     var cursorAppearance: CursorAppearanceController?
-    let folderIcons = FolderIconWindowController()
+    let folderIcons = FolderIconController()
     let settings = TrailSettings()
     let system = ParticleSystem()
     let painter = ParticlePainter()
@@ -531,22 +531,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc func showCursorAppearance() { selectSettingsTab(.cursor); showSettings() }
     @objc func showTrailEffects() { selectSettingsTab(.trail) }
     func selectSettingsTab(_ tab: SettingsTab, animated: Bool = true) {
-        guard tab != selectedSettingsTab else { return }
-        if tab == .cursor {
+        guard tab != selectedSettingsTab, settingsWindow.attachedSheet == nil else { return }
+        let incoming: NSView
+        switch tab {
+        case .trail:
+            incoming = trailContent
+        case .cursor:
             if cursorAppearance == nil { cursorAppearance = CursorAppearanceController() }
-            if cursorAppearance?.view == nil {
-                let view = cursorAppearance!.buildView(size: settingsContent.bounds.size)
-                view.wantsLayer = true; view.isHidden = true
-                settingsContent.addSubview(view)
-            }
+            incoming = cursorAppearance!.buildView(size: settingsContent.bounds.size)
+        case .folders:
+            incoming = folderIcons.buildView(size: settingsContent.bounds.size)
         }
-        guard let cursorContent = cursorAppearance?.view else { return }
-        let incoming = tab == .trail ? trailContent! : cursorContent
+        if incoming.superview == nil {
+            incoming.wantsLayer = true; incoming.isHidden = true
+            settingsContent.addSubview(incoming)
+        }
+        let pages = [trailContent, cursorAppearance?.view, folderIcons.view].compactMap { $0 }
+        let direction = tab.rawValue > selectedSettingsTab.rawValue ? 14.0 : -14.0
         settingsWindow.makeFirstResponder(nil)
         if starColorWell.isActive { starColorWell.deactivate() }
         if let color = cursorAppearance?.color, color.isActive { color.deactivate() }
         settingsContent.layer?.removeAnimation(forKey: "tabTransition")
-        for view in [trailContent!, cursorContent] { view.layer?.removeAnimation(forKey: "tabSlide") }
+        for view in pages { view.layer?.removeAnimation(forKey: "tabSlide") }
         let shouldAnimate = animated && settingsWindow.isVisible && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         if shouldAnimate {
             let fade = CATransition()
@@ -555,23 +561,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settingsContent.layer?.add(fade, forKey: "tabTransition")
         }
         selectedSettingsTab = tab
-        trailContent.isHidden = tab != .trail
-        cursorContent.isHidden = tab != .cursor
+        for view in pages { view.isHidden = view !== incoming }
         for (index, button) in settingsTabs.enumerated() {
-            let selected = index == (tab == .trail ? 0 : 1)
+            let selected = index == tab.rawValue
             button.state = selected ? .on : .off
             (button.cell as? AquaButtonCell)?.pink = selected
             button.needsDisplay = true
         }
         if shouldAnimate {
             let slide = CABasicAnimation(keyPath: "transform.translation.x")
-            slide.fromValue = tab == .cursor ? 14.0 : -14.0; slide.toValue = 0
+            slide.fromValue = direction; slide.toValue = 0
             slide.duration = 0.26
             slide.timingFunction = CAMediaTimingFunction(name: .easeOut)
             incoming.layer?.add(slide, forKey: "tabSlide")
         }
     }
-    @objc func showFolderIcons() { folderIcons.show() }
+    @objc func showFolderIcons() { selectSettingsTab(.folders); showSettings() }
     @objc func showSettings() { settingsWindow.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true) }
     @objc func chooseTheme(_ sender: ThemeRow) {
         if sender.theme == .custom && settings.customData == nil { importImage(); return }
@@ -687,8 +692,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         dragTab.state = .on
         let cursorTab = NSButton(title: "鼠标美化", target: self, action: #selector(showCursorAppearance))
         cursorTab.identifier = NSUserInterfaceItemIdentifier("aquaTab")
-        for (i, tab) in [dragTab, cursorTab].enumerated() { tab.font = .systemFont(ofSize: 13); put(tab, 600 + CGFloat(i) * 180, 296, 160, 45) }
-        settingsTabs = [dragTab, cursorTab]
+        let folderTab = NSButton(title: "文件夹图标", target: self, action: #selector(showFolderIcons))
+        folderTab.identifier = NSUserInterfaceItemIdentifier("aquaTab")
+        settingsTabs = [dragTab, cursorTab, folderTab]
+        for (i, tab) in settingsTabs.enumerated() { tab.font = .systemFont(ofSize: 13); put(tab, 510 + CGFloat(i) * 180, 296, 160, 45) }
         settingsContent = Surface(frame: frame(120, 360, 1300, 830))
         settingsContent.wantsLayer = true; settingsContent.layer?.masksToBounds = true
         root.addSubview(settingsContent)
@@ -831,10 +838,11 @@ if CommandLine.arguments.contains("--preview-stress-test") {
     }
 } else if let i = CommandLine.arguments.firstIndex(of: "--render-folder-icons"), CommandLine.arguments.count > i + 1 {
     _ = NSApplication.shared
-    let controller = FolderIconWindowController()
-    if CommandLine.arguments.contains("--split") { controller.options.splitEmpty = true }
-    controller.build()
-    let view = controller.window.contentView!
+    let delegate = AppDelegate(); delegate.buildWindow()
+    if CommandLine.arguments.contains("--split") { delegate.folderIcons.options.splitEmpty = true }
+    delegate.selectSettingsTab(.folders, animated: false)
+    let view = delegate.settingsWindow.contentView!
+    view.display()
     if let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) {
         view.cacheDisplay(in: view.bounds, to: bitmap)
         try bitmap.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: CommandLine.arguments[i + 1]))
